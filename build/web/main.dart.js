@@ -28180,7 +28180,7 @@ var $async$ahJ=A.P(function(b,c){if(b===1){o.push(c)
 s=p}for(;;)switch(s){case 0:j=B.c.lE(a)
 if(j.length<2){q=A.c([],t.H7)
 s=1
-break}n=A.hv("https://api.mapbox.com/geocoding/v5/mapbox.places/"+A.K5(2,j,B.a9,!1)+".json?access_token=pk.eyJ1IjoiZWxpcmFuYmgiLCJhIjoiY21rMmRyMzdqMGlpcDNmcXkycjZ2ZGhjMiJ9.nXK-AUEMPib6HTYBbnEPlQ&language=he&country=IL&limit=5")
+break}n=A.hv("https://api.mapbox.com/geocoding/v5/mapbox.places/"+A.K5(2,j,B.a9,!1)+".json?access_token=&language=he&country=IL&limit=5")
 p=4
 s=7
 return A.J(A.aSo(n),$async$ahJ)
@@ -28216,7 +28216,7 @@ var $async$ahL=A.P(function(a5,a6){if(a5===1){o.push(a6)
 s=p}for(;;)switch(s){case 0:a2=J.aE(a4)
 if(a2.gF(a4)<2){q=null
 s=1
-break}n=A.hv("https://api.mapbox.com/directions/v5/mapbox/driving/"+a2.f5(a4,new A.ahM(),t.N).bf(0,";")+"?access_token=pk.eyJ1IjoiZWxpcmFuYmgiLCJhIjoiY21rMmRyMzdqMGlpcDNmcXkycjZ2ZGhjMiJ9.nXK-AUEMPib6HTYBbnEPlQ&geometries=geojson&steps=true&language=he&overview=full")
+break}n=A.hv("https://api.mapbox.com/directions/v5/mapbox/driving/"+a2.f5(a4,new A.ahM(),t.N).bf(0,";")+"?access_token=&geometries=geojson&steps=true&language=he&overview=full")
 p=4
 s=7
 return A.J(A.aSo(n),$async$ahL)
