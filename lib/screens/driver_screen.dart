@@ -187,10 +187,9 @@ class _DriverScreenState extends State<DriverScreen> {
       ),
       children: [
         TileLayer(
-          urlTemplate:
-              'https://api.mapbox.com/styles/v1/mapbox/${AppConfig.mapboxStyle}'
-              '/tiles/256/{z}/{x}/{y}@2x?access_token=${AppConfig.mapboxToken}',
+          urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
           userAgentPackageName: 'com.gps.drivers',
+          maxNativeZoom: 19,
         ),
         if (_routePoints.isNotEmpty)
           PolylineLayer(
