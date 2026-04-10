@@ -1,0 +1,28 @@
+# Flutter/Dart
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+.packages
+.pub-cache/
+.pub/
+build/
+*.iml
+
+# Android
+android/
+ios/
+linux/
+macos/
+windows/
+
+# Web (generated)
+web/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+.DS_Store
+
+# Claude Code settings
+.claude/

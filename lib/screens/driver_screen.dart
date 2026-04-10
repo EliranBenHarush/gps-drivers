@@ -1,0 +1,612 @@
+import 'dart:async';
+import 'package:flutter/material.dart';
+import 'package:flutter_map/flutter_map.dart';
+import 'package:latlong2/latlong.dart';
+import 'package:geolocator/geolocator.dart';
+import '../config.dart';
+import '../models/driver.dart';
+import '../models/route_stop.dart';
+import '../models/nav_step.dart';
+import '../services/firestore_service.dart';
+import '../services/mapbox_service.dart';
+
+class DriverScreen extends StatefulWidget {
+  final Driver driver;
+  const DriverScreen({super.key, required this.driver});
+
+  @override
+  State<DriverScreen> createState() => _DriverScreenState();
+}
+
+class _DriverScreenState extends State<DriverScreen> {
+  final _mapController = MapController();
+
+  List<RouteStop> _stops = [];
+  List<LatLng> _routePoints = [];
+  List<NavStep> _navSteps = [];
+  int _currentStep = 0;
+  String _totalDistance = '';
+  String _totalDuration = '';
+
+  LatLng? _userPos;
+  StreamSubscription<Position>? _posSub;
+  StreamSubscription<List<RouteStop>>? _routeSub;
+
+  bool _loadingRoute = false;
+  bool _navStarted = false;
+  bool _mapReady = false;
+
+  static const _defaultCenter = LatLng(32.0853, 34.7818); // תל אביב
+
+  @override
+  void initState() {
+    super.initState();
+    _listenRoute();
+    _initLocation();
+  }
+
+  @override
+  void dispose() {
+    _posSub?.cancel();
+    _routeSub?.cancel();
+    _mapController.dispose();
+    super.dispose();
+  }
+
+  // ─── Firebase ──────────────────────────────────────────────────────────────
+
+  void _listenRoute() {
+    _routeSub =
+        FirestoreService.watchRoute(widget.driver.id).listen((stops) async {
+      setState(() => _stops = stops);
+      if (stops.length >= 2) {
+        setState(() => _loadingRoute = true);
+        final result = await MapboxService.getDirections(stops);
+        if (mounted && result != null) {
+          setState(() {
+            _routePoints = result.route;
+            _navSteps = result.steps;
+            _totalDistance = result.distanceText;
+            _totalDuration = result.durationText;
+            _currentStep = 0;
+            _loadingRoute = false;
+          });
+          if (_mapReady) _fitAllStops();
+        } else if (mounted) {
+          setState(() => _loadingRoute = false);
+        }
+      }
+    });
+  }
+
+  // ─── מיקום ─────────────────────────────────────────────────────────────────
+
+  Future<void> _initLocation() async {
+    try {
+      bool enabled = await Geolocator.isLocationServiceEnabled();
+      if (!enabled) return;
+      LocationPermission perm = await Geolocator.checkPermission();
+      if (perm == LocationPermission.denied) {
+        perm = await Geolocator.requestPermission();
+      }
+      if (perm == LocationPermission.deniedForever) return;
+
+      final pos = await Geolocator.getCurrentPosition(
+          desiredAccuracy: LocationAccuracy.high);
+      if (mounted) {
+        setState(() => _userPos = LatLng(pos.latitude, pos.longitude));
+      }
+    } catch (_) {}
+  }
+
+  void _startNavigation() {
+    setState(() => _navStarted = true);
+    _posSub = Geolocator.getPositionStream(
+      locationSettings: const LocationSettings(
+        accuracy: LocationAccuracy.high,
+        distanceFilter: 5,
+      ),
+    ).listen(
+      (pos) {
+        final newPos = LatLng(pos.latitude, pos.longitude);
+        if (mounted) {
+          setState(() {
+            _userPos = newPos;
+            _advanceStep(newPos);
+          });
+          _mapController.move(newPos, _mapController.camera.zoom);
+        }
+      },
+      onError: (_) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('לא ניתן לקבל מיקום GPS')),
+          );
+        }
+      },
+    );
+  }
+
+  void _stopNavigation() {
+    _posSub?.cancel();
+    _posSub = null;
+    setState(() => _navStarted = false);
+  }
+
+  void _advanceStep(LatLng pos) {
+    if (_navSteps.isEmpty || _currentStep >= _navSteps.length - 1) return;
+    final step = _navSteps[_currentStep];
+    if (step.points.isEmpty) return;
+    final target = step.points.last;
+    final dist =
+        const Distance().as(LengthUnit.Meter, pos, target);
+    if (dist < 25) setState(() => _currentStep++);
+  }
+
+  // ─── מפה ───────────────────────────────────────────────────────────────────
+
+  void _fitAllStops() {
+    if (_stops.isEmpty) return;
+    final points = _stops.map((s) => LatLng(s.lat, s.lng)).toList();
+    if (_userPos != null) points.add(_userPos!);
+    final bounds = LatLngBounds.fromPoints(points);
+    _mapController.fitCamera(
+      CameraFit.bounds(bounds: bounds, padding: const EdgeInsets.all(64)),
+    );
+  }
+
+  // ─── UI ────────────────────────────────────────────────────────────────────
+
+  @override
+  Widget build(BuildContext context) {
+    return Directionality(
+      textDirection: TextDirection.rtl,
+      child: Scaffold(
+        body: Stack(
+          children: [
+            _buildMap(),
+            _buildTopBar(),
+            if (_loadingRoute) _buildLoadingBadge(),
+            if (_stops.isNotEmpty) _buildBottomPanel(),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildMap() {
+    return FlutterMap(
+      mapController: _mapController,
+      options: MapOptions(
+        initialCenter: _userPos ?? _defaultCenter,
+        initialZoom: 13,
+        onMapReady: () {
+          setState(() => _mapReady = true);
+          if (_stops.length >= 2) _fitAllStops();
+        },
+      ),
+      children: [
+        TileLayer(
+          urlTemplate:
+              'https://api.mapbox.com/styles/v1/mapbox/${AppConfig.mapboxStyle}'
+              '/tiles/256/{z}/{x}/{y}@2x?access_token=${AppConfig.mapboxToken}',
+          userAgentPackageName: 'com.gps.drivers',
+        ),
+        if (_routePoints.isNotEmpty)
+          PolylineLayer(
+            polylines: [
+              Polyline(
+                points: _routePoints,
+                strokeWidth: 6,
+                color: const Color(0xFF1565C0),
+                borderStrokeWidth: 1.5,
+                borderColor: Colors.white,
+              ),
+            ],
+          ),
+        MarkerLayer(
+          markers: [
+            ..._stops.asMap().entries.map((e) => _stopMarker(e.key, e.value)),
+            if (_userPos != null) _userMarker(),
+          ],
+        ),
+      ],
+    );
+  }
+
+  Marker _stopMarker(int index, RouteStop stop) {
+    final isLast = index == _stops.length - 1;
+    return Marker(
+      point: LatLng(stop.lat, stop.lng),
+      width: 42,
+      height: 42,
+      child: Container(
+        decoration: BoxDecoration(
+          color: isLast ? Colors.red : const Color(0xFF1565C0),
+          shape: BoxShape.circle,
+          border: Border.all(color: Colors.white, width: 2.5),
+          boxShadow: const [
+            BoxShadow(color: Colors.black38, blurRadius: 6, offset: Offset(0, 2))
+          ],
+        ),
+        child: Center(
+          child: isLast
+              ? const Icon(Icons.flag, color: Colors.white, size: 20)
+              : Text('${index + 1}',
+                  style: const TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 14)),
+        ),
+      ),
+    );
+  }
+
+  Marker _userMarker() {
+    return Marker(
+      point: _userPos!,
+      width: 40,
+      height: 40,
+      child: Container(
+        decoration: BoxDecoration(
+          color: Colors.blue,
+          shape: BoxShape.circle,
+          border: Border.all(color: Colors.white, width: 3),
+          boxShadow: [
+            BoxShadow(
+                color: Colors.blue.withOpacity(0.4),
+                blurRadius: 12,
+                spreadRadius: 4),
+          ],
+        ),
+        child: const Icon(Icons.navigation, color: Colors.white, size: 20),
+      ),
+    );
+  }
+
+  Widget _buildTopBar() {
+    return Positioned(
+      top: 0,
+      left: 0,
+      right: 0,
+      child: SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.all(12),
+          child: Row(
+            children: [
+              _mapBtn(Icons.arrow_back, () => Navigator.pop(context)),
+              const SizedBox(width: 10),
+              Expanded(
+                child: _pill(
+                  Row(
+                    children: [
+                      const Icon(Icons.local_shipping,
+                          color: Color(0xFF1565C0), size: 20),
+                      const SizedBox(width: 8),
+                      Text(widget.driver.name,
+                          style: const TextStyle(
+                              fontWeight: FontWeight.bold, fontSize: 16)),
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(width: 10),
+              _mapBtn(Icons.fit_screen, _fitAllStops,
+                  tooltip: 'הצג מסלול מלא'),
+              if (_navStarted) ...[
+                const SizedBox(width: 6),
+                _mapBtn(Icons.stop_circle, _stopNavigation,
+                    tooltip: 'עצור ניווט', color: Colors.red),
+              ],
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _mapBtn(IconData icon, VoidCallback onTap,
+      {String? tooltip, Color? color}) {
+    return Tooltip(
+      message: tooltip ?? '',
+      child: Material(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        elevation: 4,
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(12),
+          child: Padding(
+            padding: const EdgeInsets.all(10),
+            child: Icon(icon, color: color ?? Colors.black87, size: 22),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _pill(Widget child) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        boxShadow: const [BoxShadow(color: Colors.black26, blurRadius: 6)],
+      ),
+      child: child,
+    );
+  }
+
+  Widget _buildLoadingBadge() {
+    return Positioned(
+      top: 80,
+      left: 0,
+      right: 0,
+      child: Center(
+        child: _pill(const Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            SizedBox(
+                width: 18,
+                height: 18,
+                child: CircularProgressIndicator(strokeWidth: 2)),
+            SizedBox(width: 10),
+            Text('מחשב מסלול...'),
+          ],
+        )),
+      ),
+    );
+  }
+
+  // ─── Bottom Panel ───────────────────────────────────────────────────────────
+
+  Widget _buildBottomPanel() {
+    return Positioned(
+      bottom: 0,
+      left: 0,
+      right: 0,
+      child: Container(
+        decoration: const BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.vertical(top: Radius.circular(22)),
+          boxShadow: [
+            BoxShadow(
+                color: Colors.black26, blurRadius: 20, offset: Offset(0, -4))
+          ],
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // Handle
+            Container(
+              width: 40,
+              height: 4,
+              margin: const EdgeInsets.symmetric(vertical: 10),
+              decoration: BoxDecoration(
+                  color: Colors.grey[300],
+                  borderRadius: BorderRadius.circular(2)),
+            ),
+
+            // Route summary
+            if (_totalDistance.isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 0, 16, 10),
+                child: Row(
+                  children: [
+                    _summaryChip(Icons.straighten, _totalDistance),
+                    const SizedBox(width: 8),
+                    _summaryChip(Icons.schedule, _totalDuration),
+                    const SizedBox(width: 8),
+                    _summaryChip(Icons.place, '${_stops.length} עצירות'),
+                  ],
+                ),
+              ),
+
+            // Navigation instruction or start button
+            if (_navStarted && _navSteps.isNotEmpty)
+              _buildNavInstruction()
+            else
+              _buildStartButton(),
+
+            const Divider(height: 1),
+
+            // Stops list
+            _buildStopCards(),
+            const SizedBox(height: 12),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _summaryChip(IconData icon, String label) {
+    return Expanded(
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 8),
+        decoration: BoxDecoration(
+          color: Colors.blue.shade50,
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, size: 14, color: const Color(0xFF1565C0)),
+            const SizedBox(width: 4),
+            Flexible(
+              child: Text(label,
+                  style: const TextStyle(
+                      fontSize: 12, fontWeight: FontWeight.w600),
+                  overflow: TextOverflow.ellipsis),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildStartButton() {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+      child: ElevatedButton.icon(
+        onPressed: _navSteps.isEmpty ? null : _startNavigation,
+        icon: const Icon(Icons.navigation_rounded),
+        label: const Text('התחל ניווט', style: TextStyle(fontSize: 16)),
+        style: ElevatedButton.styleFrom(
+          backgroundColor: const Color(0xFF2E7D32),
+          foregroundColor: Colors.white,
+          minimumSize: const Size(double.infinity, 52),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+          elevation: 2,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildNavInstruction() {
+    if (_currentStep >= _navSteps.length) {
+      return const Padding(
+        padding: EdgeInsets.all(16),
+        child: Row(
+          children: [
+            Icon(Icons.check_circle, color: Colors.green, size: 32),
+            SizedBox(width: 12),
+            Text('הגעת ליעד!',
+                style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+          ],
+        ),
+      );
+    }
+    final step = _navSteps[_currentStep];
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: const Color(0xFF1565C0),
+              borderRadius: BorderRadius.circular(14),
+            ),
+            child: Icon(_maneuverIcon(step.maneuverType),
+                color: Colors.white, size: 28),
+          ),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(step.instruction,
+                    style: const TextStyle(
+                        fontWeight: FontWeight.bold, fontSize: 15)),
+                const SizedBox(height: 2),
+                Text(step.distanceText,
+                    style: TextStyle(color: Colors.grey[600], fontSize: 13)),
+              ],
+            ),
+          ),
+          Text(
+            '${_currentStep + 1}/${_navSteps.length}',
+            style: TextStyle(color: Colors.grey[400], fontSize: 12),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildStopCards() {
+    return SizedBox(
+      height: 110,
+      child: ListView.builder(
+        scrollDirection: Axis.horizontal,
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+        itemCount: _stops.length,
+        itemBuilder: (ctx, i) {
+          final stop = _stops[i];
+          final isFirst = i == 0;
+          final isLast = i == _stops.length - 1;
+          final accent = isFirst
+              ? Colors.green
+              : isLast
+                  ? Colors.red
+                  : const Color(0xFF1565C0);
+          return Container(
+            width: 150,
+            margin: const EdgeInsets.only(left: 10),
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(
+              color: accent.withOpacity(0.06),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: accent.withOpacity(0.3)),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    CircleAvatar(
+                      radius: 11,
+                      backgroundColor: accent,
+                      child: isLast
+                          ? const Icon(Icons.flag,
+                              color: Colors.white, size: 12)
+                          : Text('${i + 1}',
+                              style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.bold)),
+                    ),
+                    const SizedBox(width: 6),
+                    Text(
+                      isFirst
+                          ? 'התחלה'
+                          : isLast
+                              ? 'סיום'
+                              : 'עצירה ${i + 1}',
+                      style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.bold,
+                          color: accent),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 6),
+                Expanded(
+                  child: Text(
+                    stop.address,
+                    style: const TextStyle(fontSize: 11),
+                    maxLines: 3,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ],
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  IconData _maneuverIcon(String type) {
+    switch (type) {
+      case 'turn':
+        return Icons.turn_right;
+      case 'merge':
+        return Icons.merge;
+      case 'fork':
+        return Icons.call_split;
+      case 'ramp':
+        return Icons.arrow_upward;
+      case 'roundabout':
+      case 'rotary':
+        return Icons.roundabout_right;
+      case 'arrive':
+        return Icons.location_on;
+      case 'depart':
+        return Icons.directions_car;
+      case 'end of road':
+        return Icons.block;
+      default:
+        return Icons.straight;
+    }
+  }
+}

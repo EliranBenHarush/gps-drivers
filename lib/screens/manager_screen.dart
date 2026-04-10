@@ -1,0 +1,439 @@
+import 'package:flutter/material.dart';
+import 'package:uuid/uuid.dart';
+import '../models/driver.dart';
+import '../models/route_stop.dart';
+import '../services/firestore_service.dart';
+import '../services/mapbox_service.dart';
+
+class ManagerScreen extends StatefulWidget {
+  const ManagerScreen({super.key});
+
+  @override
+  State<ManagerScreen> createState() => _ManagerScreenState();
+}
+
+class _ManagerScreenState extends State<ManagerScreen> {
+  Driver? _selectedDriver;
+  List<RouteStop> _stops = [];
+
+  final _searchCtrl = TextEditingController();
+  List<Map<String, dynamic>> _suggestions = [];
+  bool _searching = false;
+  bool _saving = false;
+  final _uuid = const Uuid();
+
+  @override
+  void dispose() {
+    _searchCtrl.dispose();
+    super.dispose();
+  }
+
+  // ─── פעולות על כתובות ─────────────────────────────────────────────────────
+
+  Future<void> _searchAddress(String query) async {
+    if (query.length < 2) {
+      setState(() => _suggestions = []);
+      return;
+    }
+    setState(() => _searching = true);
+    final results = await MapboxService.geocode(query);
+    if (mounted) setState(() { _suggestions = results; _searching = false; });
+  }
+
+  void _addStop(Map<String, dynamic> place) {
+    final stop = RouteStop(
+      id: _uuid.v4(),
+      address: place['name'] as String,
+      lat: place['lat'] as double,
+      lng: place['lng'] as double,
+      order: _stops.length,
+    );
+    setState(() {
+      _stops.add(stop);
+      _suggestions = [];
+      _searchCtrl.clear();
+    });
+  }
+
+  void _removeStop(int index) {
+    setState(() {
+      _stops.removeAt(index);
+      for (int i = 0; i < _stops.length; i++) {
+        _stops[i] = _stops[i].copyWith(order: i);
+      }
+    });
+  }
+
+  void _reorderStop(int oldIndex, int newIndex) {
+    setState(() {
+      if (newIndex > oldIndex) newIndex--;
+      final item = _stops.removeAt(oldIndex);
+      _stops.insert(newIndex, item);
+      for (int i = 0; i < _stops.length; i++) {
+        _stops[i] = _stops[i].copyWith(order: i);
+      }
+    });
+  }
+
+  Future<void> _saveRoute() async {
+    if (_selectedDriver == null) {
+      _snack('בחר נהג תחילה', isError: true);
+      return;
+    }
+    if (_stops.isEmpty) {
+      _snack('הוסף לפחות כתובת אחת למסלול', isError: true);
+      return;
+    }
+    setState(() => _saving = true);
+    await FirestoreService.saveRoute(_selectedDriver!.id, _stops);
+    if (mounted) {
+      setState(() => _saving = false);
+      _snack('המסלול נשמר בהצלחה!');
+    }
+  }
+
+  Future<void> _clearRoute() async {
+    if (_selectedDriver == null) return;
+    final ok = await _confirm('נקה מסלול?', 'האם למחוק את כל עצירות הנהג?');
+    if (!ok) return;
+    await FirestoreService.clearRoute(_selectedDriver!.id);
+    setState(() => _stops = []);
+    _snack('המסלול נמחק');
+  }
+
+  void _snack(String msg, {bool isError = false}) {
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+      content: Text(msg),
+      backgroundColor: isError ? Colors.red : Colors.green,
+    ));
+  }
+
+  Future<bool> _confirm(String title, String body) async {
+    return await showDialog<bool>(
+          context: context,
+          builder: (ctx) => Directionality(
+            textDirection: TextDirection.rtl,
+            child: AlertDialog(
+              title: Text(title),
+              content: Text(body),
+              actions: [
+                TextButton(
+                    onPressed: () => Navigator.pop(ctx, false),
+                    child: const Text('ביטול')),
+                ElevatedButton(
+                    style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+                    onPressed: () => Navigator.pop(ctx, true),
+                    child:
+                        const Text('מחק', style: TextStyle(color: Colors.white))),
+              ],
+            ),
+          ),
+        ) ??
+        false;
+  }
+
+  // ─── UI ──────────────────────────────────────────────────────────────────
+
+  @override
+  Widget build(BuildContext context) {
+    return Directionality(
+      textDirection: TextDirection.rtl,
+      child: Scaffold(
+        backgroundColor: Colors.grey[100],
+        appBar: AppBar(
+          title: const Text('ניהול מסלולים'),
+          centerTitle: true,
+          backgroundColor: const Color(0xFF1565C0),
+          foregroundColor: Colors.white,
+          elevation: 0,
+          actions: [
+            if (_stops.isNotEmpty)
+              IconButton(
+                icon: const Icon(Icons.delete_sweep),
+                tooltip: 'נקה מסלול',
+                onPressed: _clearRoute,
+              ),
+            if (_saving)
+              const Padding(
+                padding: EdgeInsets.all(16),
+                child: SizedBox(
+                  width: 20,
+                  height: 20,
+                  child: CircularProgressIndicator(
+                      color: Colors.white, strokeWidth: 2),
+                ),
+              )
+            else
+              IconButton(
+                icon: const Icon(Icons.save_rounded),
+                tooltip: 'שמור מסלול',
+                onPressed: _saveRoute,
+              ),
+          ],
+        ),
+        body: Column(
+          children: [
+            _buildDriverSelector(),
+            _buildSearchBar(),
+            if (_suggestions.isNotEmpty) _buildSuggestions(),
+            Expanded(child: _buildStopsList()),
+          ],
+        ),
+        floatingActionButton: _stops.isNotEmpty
+            ? FloatingActionButton.extended(
+                onPressed: _saveRoute,
+                icon: const Icon(Icons.save_rounded),
+                label: Text('שמור מסלול · ${_stops.length} עצירות'),
+                backgroundColor: const Color(0xFF1565C0),
+                foregroundColor: Colors.white,
+              )
+            : null,
+      ),
+    );
+  }
+
+  Widget _buildDriverSelector() {
+    return Container(
+      color: Colors.white,
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
+      child: StreamBuilder<List<Driver>>(
+        stream: FirestoreService.watchDrivers(),
+        builder: (context, snapshot) {
+          final drivers = snapshot.data ?? [];
+          return Row(
+            children: [
+              const Icon(Icons.person, color: Color(0xFF1565C0), size: 22),
+              const SizedBox(width: 12),
+              Expanded(
+                child: DropdownButtonFormField<Driver>(
+                  value: _selectedDriver != null &&
+                          drivers.any((d) => d.id == _selectedDriver!.id)
+                      ? drivers.firstWhere((d) => d.id == _selectedDriver!.id)
+                      : null,
+                  hint: const Text('בחר נהג'),
+                  decoration: InputDecoration(
+                    border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(10)),
+                    contentPadding:
+                        const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                    isDense: true,
+                  ),
+                  items: drivers
+                      .map((d) =>
+                          DropdownMenuItem(value: d, child: Text(d.name)))
+                      .toList(),
+                  onChanged: (d) async {
+                    setState(() {
+                      _selectedDriver = d;
+                      _stops = [];
+                    });
+                    if (d != null) {
+                      final existing =
+                          await FirestoreService.watchRoute(d.id).first;
+                      if (mounted) setState(() => _stops = List.from(existing));
+                    }
+                  },
+                ),
+              ),
+              const SizedBox(width: 8),
+              _iconBtn(Icons.person_add_alt_1, 'הוסף נהג', _showAddDriverDialog),
+            ],
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _buildSearchBar() {
+    return Container(
+      color: Colors.white,
+      padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+      child: TextField(
+        controller: _searchCtrl,
+        decoration: InputDecoration(
+          hintText: 'חפש כתובת להוספה...',
+          prefixIcon: _searching
+              ? const Padding(
+                  padding: EdgeInsets.all(14),
+                  child: SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(strokeWidth: 2)),
+                )
+              : const Icon(Icons.search),
+          suffixIcon: _searchCtrl.text.isNotEmpty
+              ? IconButton(
+                  icon: const Icon(Icons.clear),
+                  onPressed: () {
+                    _searchCtrl.clear();
+                    setState(() => _suggestions = []);
+                  },
+                )
+              : null,
+          border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+          isDense: true,
+        ),
+        onChanged: _searchAddress,
+      ),
+    );
+  }
+
+  Widget _buildSuggestions() {
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(10),
+        boxShadow: const [BoxShadow(color: Colors.black26, blurRadius: 6)],
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: _suggestions
+            .map((s) => ListTile(
+                  dense: true,
+                  leading:
+                      const Icon(Icons.location_on, color: Color(0xFF1565C0)),
+                  title: Text(s['name'] as String,
+                      style: const TextStyle(fontSize: 13)),
+                  onTap: () => _addStop(s),
+                ))
+            .toList(),
+      ),
+    );
+  }
+
+  Widget _buildStopsList() {
+    if (_stops.isEmpty) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.route, size: 80, color: Colors.grey[300]),
+            const SizedBox(height: 16),
+            Text(
+              _selectedDriver == null
+                  ? 'בחר נהג ותוסיף כתובות'
+                  : 'חפש כתובת להוספה למסלול',
+              style: TextStyle(fontSize: 16, color: Colors.grey[500]),
+            ),
+          ],
+        ),
+      );
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 6),
+          child: Text(
+            'עצירות (${_stops.length})',
+            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
+          ),
+        ),
+        Expanded(
+          child: ReorderableListView.builder(
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 80),
+            itemCount: _stops.length,
+            onReorder: _reorderStop,
+            itemBuilder: (ctx, i) {
+              final stop = _stops[i];
+              return Card(
+                key: ValueKey(stop.id),
+                margin: const EdgeInsets.only(bottom: 8),
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12)),
+                child: ListTile(
+                  leading: CircleAvatar(
+                    backgroundColor: i == _stops.length - 1
+                        ? Colors.red
+                        : const Color(0xFF1565C0),
+                    child: i == _stops.length - 1
+                        ? const Icon(Icons.flag, color: Colors.white, size: 18)
+                        : Text('${i + 1}',
+                            style: const TextStyle(
+                                color: Colors.white,
+                                fontWeight: FontWeight.bold)),
+                  ),
+                  title: Text(stop.address,
+                      style: const TextStyle(fontSize: 13)),
+                  subtitle: i == 0
+                      ? const Text('נקודת התחלה',
+                          style: TextStyle(
+                              color: Color(0xFF2E7D32), fontSize: 11))
+                      : i == _stops.length - 1
+                          ? const Text('נקודת סיום',
+                              style: TextStyle(
+                                  color: Colors.red, fontSize: 11))
+                          : null,
+                  trailing: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      IconButton(
+                        icon: const Icon(Icons.delete_outline,
+                            color: Colors.red, size: 20),
+                        onPressed: () => _removeStop(i),
+                      ),
+                      const Icon(Icons.drag_handle, color: Colors.grey),
+                    ],
+                  ),
+                ),
+              );
+            },
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _iconBtn(IconData icon, String tooltip, VoidCallback onPressed) {
+    return Tooltip(
+      message: tooltip,
+      child: InkWell(
+        onTap: onPressed,
+        borderRadius: BorderRadius.circular(8),
+        child: Padding(
+          padding: const EdgeInsets.all(8),
+          child: Icon(icon, color: const Color(0xFF1565C0)),
+        ),
+      ),
+    );
+  }
+
+  void _showAddDriverDialog() {
+    final ctrl = TextEditingController();
+    showDialog(
+      context: context,
+      builder: (ctx) => Directionality(
+        textDirection: TextDirection.rtl,
+        child: AlertDialog(
+          title: const Text('הוסף נהג חדש'),
+          content: TextField(
+            controller: ctrl,
+            decoration: const InputDecoration(
+              labelText: 'שם הנהג',
+              border: OutlineInputBorder(),
+            ),
+            autofocus: true,
+            onSubmitted: (_) => _submitAddDriver(ctrl, ctx),
+          ),
+          actions: [
+            TextButton(
+                onPressed: () => Navigator.pop(ctx),
+                child: const Text('ביטול')),
+            ElevatedButton(
+                onPressed: () => _submitAddDriver(ctrl, ctx),
+                child: const Text('הוסף')),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _submitAddDriver(
+      TextEditingController ctrl, BuildContext ctx) async {
+    if (ctrl.text.trim().isEmpty) return;
+    await FirestoreService.addDriver(ctrl.text.trim());
+    if (ctx.mounted) Navigator.pop(ctx);
+  }
+}
