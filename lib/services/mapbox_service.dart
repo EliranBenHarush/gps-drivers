@@ -1,35 +1,35 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:latlong2/latlong.dart';
-import '../config.dart';
 import '../models/route_stop.dart';
 import '../models/nav_step.dart';
 
 class MapboxService {
-  static const _baseUrl = 'https://api.mapbox.com';
-
-  // ─── Geocoding: חיפוש כתובת → קואורדינטות ────────────────────────────────
+  // ─── Geocoding: Nominatim (OpenStreetMap) ─────────────────────────────────
 
   static Future<List<Map<String, dynamic>>> geocode(String query) async {
     if (query.trim().length < 2) return [];
     final encoded = Uri.encodeComponent(query.trim());
     final url = Uri.parse(
-      '$_baseUrl/geocoding/v5/mapbox.places/$encoded.json'
-      '?access_token=${AppConfig.mapboxToken}'
-      '&language=he'
-      '&country=IL'
-      '&limit=5',
+      'https://nominatim.openstreetmap.org/search'
+      '?q=$encoded'
+      '&format=json'
+      '&addressdetails=1'
+      '&limit=5'
+      '&countrycodes=il'
+      '&accept-language=he',
     );
     try {
-      final res = await http.get(url);
+      final res = await http.get(url, headers: {
+        'User-Agent': 'gps-drivers-app/1.0',
+      });
       if (res.statusCode != 200) return [];
-      final body = json.decode(res.body) as Map<String, dynamic>;
-      return (body['features'] as List).map((f) {
-        final center = f['center'] as List;
+      final body = json.decode(res.body) as List;
+      return body.map((f) {
         return {
-          'name': f['place_name'] as String,
-          'lng': (center[0] as num).toDouble(),
-          'lat': (center[1] as num).toDouble(),
+          'name': f['display_name'] as String,
+          'lng': double.parse(f['lon'] as String),
+          'lat': double.parse(f['lat'] as String),
         };
       }).toList();
     } catch (_) {
@@ -37,19 +37,17 @@ class MapboxService {
     }
   }
 
-  // ─── Directions: מסלול + הוראות ניווט ────────────────────────────────────
+  // ─── Directions: OSRM (חינמי, ללא טוקן) ──────────────────────────────────
 
   static Future<DirectionsResult?> getDirections(List<RouteStop> stops) async {
     if (stops.length < 2) return null;
 
     final coords = stops.map((s) => '${s.lng},${s.lat}').join(';');
     final url = Uri.parse(
-      '$_baseUrl/directions/v5/mapbox/driving/$coords'
-      '?access_token=${AppConfig.mapboxToken}'
+      'https://router.project-osrm.org/route/v1/driving/$coords'
+      '?overview=full'
       '&geometries=geojson'
-      '&steps=true'
-      '&language=he'
-      '&overview=full',
+      '&steps=true',
     );
 
     try {
@@ -72,7 +70,7 @@ class MapboxService {
       final steps = <NavStep>[];
       for (final leg in route['legs'] as List) {
         for (final step in (leg as Map)['steps'] as List) {
-          steps.add(NavStep.fromJson(step as Map<String, dynamic>));
+          steps.add(NavStep.fromOsrm(step as Map<String, dynamic>));
         }
       }
 
