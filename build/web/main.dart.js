@@ -100218,7 +100218,7 @@ return A.iW(A.dp(o,A.dA(m,B.b3,B.y,B.aF),B.t,o,o,B.Kd,o,o,o,B.OP,o,o,o),B.T)},
 $S:36}
 A.aAO.prototype={
 $0(){var s=this.a
-window.location.href="waze://ul?ll="+A.k(s.c)+","+A.k(s.d)+"&navigate=yes"},
+window.location.href="https://waze.com/ul?ll="+A.k(s.c)+","+A.k(s.d)+"&navigate=yes"},
 $S:0}
 A.aAN.prototype={
 $0(){window.location.href="tel:"+this.a},

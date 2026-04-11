@@ -854,7 +854,7 @@ class _DriverScreenState extends State<DriverScreen> {
                 child: ElevatedButton.icon(
                   onPressed: () {
                     html.window.location.href =
-                        'waze://ul?ll=${stop.lat},${stop.lng}&navigate=yes';
+                        'https://waze.com/ul?ll=${stop.lat},${stop.lng}&navigate=yes';
                   },
                   icon: const Text('🗺️'),
                   label: const Text('פתח בוואיז',
