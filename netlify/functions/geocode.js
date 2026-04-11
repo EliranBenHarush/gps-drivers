@@ -1,18 +1,6 @@
 const https = require('https');
 
-// Nominatim finds house numbers better when number comes before street name.
-// If query looks like "רחוב 5" or "רחוב 5, עיר", reorder to "5 רחוב, עיר".
-function reorderQuery(q) {
-  // Match: word(s) then space then number, optionally followed by comma + city
-  const match = q.match(/^(.+?)\s+(\d+)(.*)$/);
-  if (match) {
-    const street = match[1].trim();
-    const number = match[2];
-    const rest = match[3]; // e.g. ", בת ים"
-    return number + ' ' + street + rest;
-  }
-  return q;
-}
+const MAPBOX_TOKEN = 'pk.eyJ1IjoiZWxpcmFuYmgiLCJhIjoiY21rMmRyMzdqMGlpcDNmcXkycjZ2ZGhjMiJ9.nXK-AUEMPib6HTYBbnEPlQ';
 
 exports.handler = async function (event) {
   const q = (event.queryStringParameters && event.queryStringParameters.q) || '';
@@ -20,16 +8,14 @@ exports.handler = async function (event) {
     return { statusCode: 400, body: JSON.stringify([]) };
   }
 
-  const reordered = reorderQuery(q);
-
+  const encoded = encodeURIComponent(q.trim());
   const url =
-    'https://nominatim.openstreetmap.org/search' +
-    '?q=' + encodeURIComponent(reordered) +
-    '&format=json' +
-    '&addressdetails=1' +
+    'https://api.mapbox.com/geocoding/v5/mapbox.places/' + encoded + '.json' +
+    '?access_token=' + MAPBOX_TOKEN +
+    '&country=il' +
+    '&language=he' +
     '&limit=5' +
-    '&countrycodes=il' +
-    '&accept-language=he';
+    '&types=address';
 
   return new Promise((resolve) => {
     https
@@ -37,11 +23,23 @@ exports.handler = async function (event) {
         let data = '';
         res.on('data', (chunk) => (data += chunk));
         res.on('end', () => {
-          resolve({
-            statusCode: 200,
-            headers: { 'Content-Type': 'application/json' },
-            body: data,
-          });
+          try {
+            const json = JSON.parse(data);
+            const features = json.features || [];
+            // Transform Mapbox format to match what Flutter expects
+            const results = features.map((f) => ({
+              display_name: f.place_name,
+              lon: String(f.geometry.coordinates[0]),
+              lat: String(f.geometry.coordinates[1]),
+            }));
+            resolve({
+              statusCode: 200,
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(results),
+            });
+          } catch (e) {
+            resolve({ statusCode: 500, body: JSON.stringify({ error: 'parse error' }) });
+          }
         });
       })
       .on('error', (e) => {
