@@ -44,7 +44,7 @@ class _ManagerScreenState extends State<ManagerScreen> {
       return;
     }
     setState(() => _searching = true);
-    _debounce = Timer(const Duration(milliseconds: 450), () => _doSearch(query.trim()));
+    _debounce = Timer(const Duration(milliseconds: 200), () => _doSearch(query.trim()));
   }
 
   Future<void> _doSearch(String query) async {
