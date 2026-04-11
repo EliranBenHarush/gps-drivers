@@ -71,10 +71,20 @@ class FirestoreService {
     return _db
         .collection('completedStops')
         .where('driverId', isEqualTo: driverId)
-        .orderBy('timestamp', descending: true)
         .snapshots()
-        .map((snap) => snap.docs
-            .map((d) => <String, dynamic>{...d.data(), 'docId': d.id})
-            .toList());
+        .map((snap) {
+          final docs = snap.docs
+              .map((d) => <String, dynamic>{...d.data(), 'docId': d.id})
+              .toList();
+          docs.sort((a, b) {
+            final ta = a['timestamp'];
+            final tb = b['timestamp'];
+            if (ta == null && tb == null) return 0;
+            if (ta == null) return 1;
+            if (tb == null) return -1;
+            return (tb as Timestamp).compareTo(ta as Timestamp);
+          });
+          return docs;
+        });
   }
 }
