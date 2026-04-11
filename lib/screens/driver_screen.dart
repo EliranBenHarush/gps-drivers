@@ -853,9 +853,13 @@ class _DriverScreenState extends State<DriverScreen> {
                 child: ElevatedButton.icon(
                   onPressed: () async {
                     final uri = Uri.parse(stop.wazeUrl);
-                    if (await canLaunchUrl(uri)) {
-                      await launchUrl(uri,
-                          mode: LaunchMode.externalApplication);
+                    try {
+                      await launchUrl(uri, mode: LaunchMode.externalApplication);
+                    } catch (_) {
+                      await launchUrl(
+                        Uri.parse('https://waze.com/ul?ll=${stop.lat},${stop.lng}&navigate=yes'),
+                        mode: LaunchMode.externalApplication,
+                      );
                     }
                   },
                   icon: const Text('🗺️'),
@@ -881,9 +885,9 @@ class _DriverScreenState extends State<DriverScreen> {
     return InkWell(
       onTap: () async {
         final uri = Uri.parse('tel:$phone');
-        if (await canLaunchUrl(uri)) {
+        try {
           await launchUrl(uri);
-        }
+        } catch (_) {}
       },
       borderRadius: BorderRadius.circular(10),
       child: Container(
