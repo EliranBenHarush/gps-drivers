@@ -1,11 +1,11 @@
 {
-    "name": "gps_drivers",
-    "short_name": "gps_drivers",
+    "name": "בראשית ריהוט גן",
+    "short_name": "בראשית",
     "start_url": ".",
     "display": "standalone",
-    "background_color": "#0175C2",
-    "theme_color": "#0175C2",
-    "description": "A new Flutter project.",
+    "background_color": "#2d5a1b",
+    "theme_color": "#2d5a1b",
+    "description": "מערכת GPS נהגים - בראשית ריהוט גן",
     "orientation": "portrait-primary",
     "prefer_related_applications": false,
     "icons": [
