@@ -28442,7 +28442,7 @@ var $async$ai4=A.O(function(b,c){if(b===1){o.push(c)
 s=p}for(;;)switch(s){case 0:h=B.c.jh(a)
 if(h.length<2){q=A.c([],t.H7)
 s=1
-break}n=A.fB("https://photon.komoot.io/api/?q="+A.Kg(2,h,B.a9,!1)+"&lang=he&limit=5&lat=31.5&lon=34.8")
+break}n=A.fB("https://photon.komoot.io/api/?q="+A.Kg(2,h,B.a9,!1)+"&limit=5&lat=31.5&lon=34.8")
 p=4
 h=t.N
 s=7
