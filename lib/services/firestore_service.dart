@@ -15,8 +15,8 @@ class FirestoreService {
         );
   }
 
-  static Future<void> addDriver(String name) {
-    return _db.collection('drivers').add({'name': name.trim()});
+  static Future<void> addDriver(String name, String pin) {
+    return _db.collection('drivers').add({'name': name.trim(), 'pin': pin.trim()});
   }
 
   static Future<void> deleteDriver(String driverId) async {

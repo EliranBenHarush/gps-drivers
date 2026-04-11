@@ -620,6 +620,11 @@ class _ManagerScreenState extends State<ManagerScreen> {
               ),
               const SizedBox(width: 8),
               _iconBtn(Icons.person_add_alt_1, 'הוסף נהג', _showAddDriverDialog),
+              if (_selectedDriver != null) ...[
+                const SizedBox(width: 4),
+                _iconBtn(Icons.person_remove_alt_1, 'מחק נהג', _deleteSelectedDriver,
+                    color: Colors.red),
+              ],
             ],
           );
         },
@@ -830,7 +835,8 @@ class _ManagerScreenState extends State<ManagerScreen> {
     );
   }
 
-  Widget _iconBtn(IconData icon, String tooltip, VoidCallback onPressed) {
+  Widget _iconBtn(IconData icon, String tooltip, VoidCallback onPressed,
+      {Color? color}) {
     return Tooltip(
       message: tooltip,
       child: InkWell(
@@ -838,35 +844,72 @@ class _ManagerScreenState extends State<ManagerScreen> {
         borderRadius: BorderRadius.circular(8),
         child: Padding(
           padding: const EdgeInsets.all(8),
-          child: Icon(icon, color: const Color(0xFF1565C0)),
+          child: Icon(icon, color: color ?? const Color(0xFF1565C0)),
         ),
       ),
     );
   }
 
+  Future<void> _deleteSelectedDriver() async {
+    if (_selectedDriver == null) return;
+    final ok = await _confirm(
+      'מחק נהג',
+      'האם למחוק את הנהג "${_selectedDriver!.name}"?\nהמסלול וכל הנתונים שלו יימחקו.',
+    );
+    if (!ok) return;
+    final id = _selectedDriver!.id;
+    setState(() {
+      _selectedDriver = null;
+      _stops = [];
+    });
+    await FirestoreService.deleteDriver(id);
+    await FirestoreService.clearCompletedStops(id);
+    _snack('הנהג נמחק');
+  }
+
   void _showAddDriverDialog() {
-    final ctrl = TextEditingController();
+    final nameCtrl = TextEditingController();
+    final pinCtrl = TextEditingController();
     showDialog(
       context: context,
       builder: (ctx) => Directionality(
         textDirection: TextDirection.rtl,
         child: AlertDialog(
           title: const Text('הוסף נהג חדש'),
-          content: TextField(
-            controller: ctrl,
-            decoration: const InputDecoration(
-              labelText: 'שם הנהג',
-              border: OutlineInputBorder(),
-            ),
-            autofocus: true,
-            onSubmitted: (_) => _submitAddDriver(ctrl, ctx),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: nameCtrl,
+                decoration: const InputDecoration(
+                  labelText: 'שם הנהג',
+                  border: OutlineInputBorder(),
+                  prefixIcon: Icon(Icons.person),
+                ),
+                autofocus: true,
+                textInputAction: TextInputAction.next,
+              ),
+              const SizedBox(height: 14),
+              TextField(
+                controller: pinCtrl,
+                decoration: const InputDecoration(
+                  labelText: 'קוד כניסה (PIN)',
+                  border: OutlineInputBorder(),
+                  prefixIcon: Icon(Icons.lock_outline),
+                  hintText: 'לדוגמה: 1234',
+                ),
+                keyboardType: TextInputType.number,
+                obscureText: false,
+                onSubmitted: (_) => _submitAddDriver(nameCtrl, pinCtrl, ctx),
+              ),
+            ],
           ),
           actions: [
             TextButton(
                 onPressed: () => Navigator.pop(ctx),
                 child: const Text('ביטול')),
             ElevatedButton(
-                onPressed: () => _submitAddDriver(ctrl, ctx),
+                onPressed: () => _submitAddDriver(nameCtrl, pinCtrl, ctx),
                 child: const Text('הוסף')),
           ],
         ),
@@ -874,9 +917,13 @@ class _ManagerScreenState extends State<ManagerScreen> {
     );
   }
 
-  Future<void> _submitAddDriver(TextEditingController ctrl, BuildContext ctx) async {
-    if (ctrl.text.trim().isEmpty) return;
-    await FirestoreService.addDriver(ctrl.text.trim());
+  Future<void> _submitAddDriver(
+      TextEditingController nameCtrl,
+      TextEditingController pinCtrl,
+      BuildContext ctx) async {
+    if (nameCtrl.text.trim().isEmpty) return;
+    final pin = pinCtrl.text.trim().isEmpty ? '1111' : pinCtrl.text.trim();
+    await FirestoreService.addDriver(nameCtrl.text.trim(), pin);
     if (ctx.mounted) Navigator.pop(ctx);
   }
 }
