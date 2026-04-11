@@ -152,6 +152,107 @@ class _DriverScreenState extends State<DriverScreen> {
     await FirestoreService.saveRoute(widget.driver.id, remaining);
   }
 
+  Future<void> _handleDone(RouteStop stop) async {
+    // שלב 1: אישור
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => Directionality(
+        textDirection: TextDirection.rtl,
+        child: AlertDialog(
+          title: const Text('אישור סיום משלוח'),
+          content: const Text('האם אתה בטוח שסיימת את המשלוח?'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('ביטול'),
+            ),
+            ElevatedButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFF2E7D32),
+                  foregroundColor: Colors.white),
+              child: const Text('אישור'),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+
+    // שלב 2: הזנת סכום גבייה
+    final ctrl = TextEditingController(text: stop.balance);
+    final amount = await showDialog<String>(
+      context: context,
+      builder: (ctx) => Directionality(
+        textDirection: TextDirection.rtl,
+        child: AlertDialog(
+          title: const Text('גבייה מהלקוח'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (stop.balance.isNotEmpty)
+                Container(
+                  margin: const EdgeInsets.only(bottom: 14),
+                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                  decoration: BoxDecoration(
+                    color: Colors.green.shade50,
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: Colors.green.shade200),
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.attach_money, color: Colors.green),
+                      const SizedBox(width: 6),
+                      Text('יתרה לגבייה: ₪${stop.balance}',
+                          style: const TextStyle(
+                              fontWeight: FontWeight.bold, fontSize: 15)),
+                    ],
+                  ),
+                ),
+              TextField(
+                controller: ctrl,
+                keyboardType: TextInputType.number,
+                autofocus: true,
+                decoration: const InputDecoration(
+                  labelText: 'סכום שנגבה (₪)',
+                  border: OutlineInputBorder(),
+                  prefixText: '₪ ',
+                ),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, null),
+              child: const Text('ביטול'),
+            ),
+            ElevatedButton(
+              onPressed: () => Navigator.pop(ctx, ctrl.text.trim()),
+              style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFF2E7D32),
+                  foregroundColor: Colors.white),
+              child: const Text('אישור'),
+            ),
+          ],
+        ),
+      ),
+    );
+    ctrl.dispose();
+    if (amount == null || !mounted) return;
+
+    // שמירת רשומת גבייה
+    await FirestoreService.saveCompletedStop(
+      driverId: widget.driver.id,
+      driverName: widget.driver.name,
+      address: stop.address,
+      expectedBalance: stop.balance,
+      collectedAmount: amount,
+    );
+
+    // הסרת העצירה מהמסלול
+    await _markStopDone(stop);
+  }
+
   // ─── מפה ───────────────────────────────────────────────────────────────────
 
   void _fitAllStops() {
@@ -605,32 +706,7 @@ class _DriverScreenState extends State<DriverScreen> {
                     width: double.infinity,
                     height: 28,
                     child: ElevatedButton.icon(
-                      onPressed: () async {
-                        final confirmed = await showDialog<bool>(
-                          context: context,
-                          builder: (ctx) => Directionality(
-                            textDirection: TextDirection.rtl,
-                            child: AlertDialog(
-                              title: const Text('אישור סיום משלוח'),
-                              content: const Text('האם אתה בטוח שסיימת את המשלוח?'),
-                              actions: [
-                                TextButton(
-                                  onPressed: () => Navigator.pop(ctx, false),
-                                  child: const Text('ביטול'),
-                                ),
-                                ElevatedButton(
-                                  onPressed: () => Navigator.pop(ctx, true),
-                                  style: ElevatedButton.styleFrom(
-                                      backgroundColor: const Color(0xFF2E7D32),
-                                      foregroundColor: Colors.white),
-                                  child: const Text('אישור'),
-                                ),
-                              ],
-                            ),
-                          ),
-                        );
-                        if (confirmed == true) _markStopDone(stop);
-                      },
+                      onPressed: () => _handleDone(stop),
                       icon: const Icon(Icons.check, size: 13),
                       label: const Text('בוצע', style: TextStyle(fontSize: 11)),
                       style: ElevatedButton.styleFrom(

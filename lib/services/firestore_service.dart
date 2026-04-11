@@ -47,4 +47,34 @@ class FirestoreService {
   static Future<void> clearRoute(String driverId) {
     return _db.collection('routes').doc(driverId).delete();
   }
+
+  // ─── גבייות ──────────────────────────────────────────────────────────────
+
+  static Future<void> saveCompletedStop({
+    required String driverId,
+    required String driverName,
+    required String address,
+    required String expectedBalance,
+    required String collectedAmount,
+  }) {
+    return _db.collection('completedStops').add({
+      'driverId': driverId,
+      'driverName': driverName,
+      'address': address,
+      'expectedBalance': expectedBalance,
+      'collectedAmount': collectedAmount,
+      'timestamp': FieldValue.serverTimestamp(),
+    });
+  }
+
+  static Stream<List<Map<String, dynamic>>> watchCompletedStops(String driverId) {
+    return _db
+        .collection('completedStops')
+        .where('driverId', isEqualTo: driverId)
+        .orderBy('timestamp', descending: true)
+        .snapshots()
+        .map((snap) => snap.docs
+            .map((d) => <String, dynamic>{...d.data(), 'docId': d.id})
+            .toList());
+  }
 }

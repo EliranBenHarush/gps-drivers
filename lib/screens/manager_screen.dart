@@ -203,6 +203,204 @@ class _ManagerScreenState extends State<ManagerScreen> {
     );
   }
 
+  void _showCollectionsReport() {
+    if (_selectedDriver == null) {
+      _snack('בחר נהג תחילה', isError: true);
+      return;
+    }
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => Directionality(
+        textDirection: TextDirection.rtl,
+        child: DraggableScrollableSheet(
+          initialChildSize: 0.7,
+          maxChildSize: 0.95,
+          minChildSize: 0.4,
+          builder: (ctx, scroll) => Container(
+            decoration: const BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.vertical(top: Radius.circular(22)),
+            ),
+            child: Column(
+              children: [
+                // Handle
+                Container(
+                  width: 40,
+                  height: 4,
+                  margin: const EdgeInsets.symmetric(vertical: 12),
+                  decoration: BoxDecoration(
+                      color: Colors.grey[300],
+                      borderRadius: BorderRadius.circular(2)),
+                ),
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 0, 20, 12),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.receipt_long, color: Color(0xFF1565C0)),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Text(
+                          'דוח גבייה - ${_selectedDriver!.name}',
+                          style: const TextStyle(
+                              fontSize: 18, fontWeight: FontWeight.bold),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const Divider(height: 1),
+                Expanded(
+                  child: StreamBuilder<List<Map<String, dynamic>>>(
+                    stream: FirestoreService.watchCompletedStops(
+                        _selectedDriver!.id),
+                    builder: (ctx, snap) {
+                      if (snap.connectionState == ConnectionState.waiting) {
+                        return const Center(child: CircularProgressIndicator());
+                      }
+                      final items = snap.data ?? [];
+                      if (items.isEmpty) {
+                        return const Center(
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Icon(Icons.inbox, size: 60, color: Colors.grey),
+                              SizedBox(height: 12),
+                              Text('אין גבייות עדיין',
+                                  style: TextStyle(color: Colors.grey)),
+                            ],
+                          ),
+                        );
+                      }
+
+                      double total = 0;
+                      for (final item in items) {
+                        final v = double.tryParse(
+                                item['collectedAmount'] as String? ?? '') ??
+                            0;
+                        total += v;
+                      }
+
+                      return Column(
+                        children: [
+                          // Total banner
+                          Container(
+                            margin: const EdgeInsets.all(16),
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 20, vertical: 14),
+                            decoration: BoxDecoration(
+                              color: Colors.green.shade50,
+                              borderRadius: BorderRadius.circular(14),
+                              border: Border.all(color: Colors.green.shade200),
+                            ),
+                            child: Row(
+                              children: [
+                                const Icon(Icons.account_balance_wallet,
+                                    color: Colors.green, size: 28),
+                                const SizedBox(width: 12),
+                                Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text('${items.length} משלוחים',
+                                        style: TextStyle(
+                                            color: Colors.grey[700],
+                                            fontSize: 13)),
+                                    Text('סה"כ גבייה',
+                                        style: TextStyle(
+                                            color: Colors.grey[700],
+                                            fontSize: 13)),
+                                  ],
+                                ),
+                                const Spacer(),
+                                Text(
+                                  '₪${total % 1 == 0 ? total.toInt() : total.toStringAsFixed(2)}',
+                                  style: const TextStyle(
+                                      fontSize: 26,
+                                      fontWeight: FontWeight.bold,
+                                      color: Colors.green),
+                                ),
+                              ],
+                            ),
+                          ),
+                          Expanded(
+                            child: ListView.builder(
+                              controller: scroll,
+                              padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                              itemCount: items.length,
+                              itemBuilder: (ctx, i) {
+                                final item = items[i];
+                                final collected =
+                                    item['collectedAmount'] as String? ?? '';
+                                final expected =
+                                    item['expectedBalance'] as String? ?? '';
+                                final address =
+                                    item['address'] as String? ?? '';
+                                return Card(
+                                  margin: const EdgeInsets.only(bottom: 8),
+                                  shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(12)),
+                                  child: Padding(
+                                    padding: const EdgeInsets.all(12),
+                                    child: Row(
+                                      children: [
+                                        CircleAvatar(
+                                          radius: 18,
+                                          backgroundColor: const Color(0xFF1565C0),
+                                          child: Text('${i + 1}',
+                                              style: const TextStyle(
+                                                  color: Colors.white,
+                                                  fontWeight: FontWeight.bold,
+                                                  fontSize: 13)),
+                                        ),
+                                        const SizedBox(width: 12),
+                                        Expanded(
+                                          child: Column(
+                                            crossAxisAlignment:
+                                                CrossAxisAlignment.start,
+                                            children: [
+                                              Text(address,
+                                                  style: const TextStyle(
+                                                      fontSize: 13),
+                                                  maxLines: 2,
+                                                  overflow:
+                                                      TextOverflow.ellipsis),
+                                              if (expected.isNotEmpty)
+                                                Text('יתרה: ₪$expected',
+                                                    style: TextStyle(
+                                                        fontSize: 11,
+                                                        color: Colors.grey[600])),
+                                            ],
+                                          ),
+                                        ),
+                                        const SizedBox(width: 8),
+                                        Text(
+                                          '₪$collected',
+                                          style: const TextStyle(
+                                              fontSize: 18,
+                                              fontWeight: FontWeight.bold,
+                                              color: Colors.green),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                );
+                              },
+                            ),
+                          ),
+                        ],
+                      );
+                    },
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
   Future<void> _saveRoute() async {
     if (_selectedDriver == null) {
       _snack('בחר נהג תחילה', isError: true);
@@ -274,7 +472,12 @@ class _ManagerScreenState extends State<ManagerScreen> {
           foregroundColor: Colors.white,
           elevation: 0,
           actions: [
-            if (_stops.isNotEmpty)
+            IconButton(
+              icon: const Icon(Icons.receipt_long),
+              tooltip: 'דוח גבייה',
+              onPressed: _showCollectionsReport,
+            ),
+          if (_stops.isNotEmpty)
               IconButton(
                 icon: const Icon(Icons.delete_sweep),
                 tooltip: 'נקה מסלול',
