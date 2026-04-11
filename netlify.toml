@@ -1,6 +1,7 @@
 [build]
   publish = "build/web"
   command = "echo 'Using pre-built web assets'"
+  functions = "netlify/functions"
 
 [[redirects]]
   from = "/*"
