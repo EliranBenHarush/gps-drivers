@@ -11,12 +11,14 @@ class MapboxService {
     if (query.trim().length < 2) return [];
     final encoded = Uri.encodeComponent(query.trim());
     // bbox = Israel bounding box: lon_min,lat_min,lon_max,lat_max
+    // lat/lon = center of Israel as location bias
     final url = Uri.parse(
       'https://photon.komoot.io/api/'
       '?q=$encoded'
       '&lang=he'
       '&limit=5'
-      '&bbox=34.2,29.4,35.9,33.3',
+      '&lat=31.5'
+      '&lon=34.8',
     );
     try {
       final res = await http.get(url, headers: {
