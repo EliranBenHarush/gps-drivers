@@ -852,15 +852,11 @@ class _DriverScreenState extends State<DriverScreen> {
                 width: double.infinity,
                 child: ElevatedButton.icon(
                   onPressed: () async {
-                    final uri = Uri.parse(stop.wazeUrl);
+                    final uri = Uri.parse(
+                        'https://waze.com/ul?ll=${stop.lat},${stop.lng}&navigate=yes');
                     try {
-                      await launchUrl(uri, mode: LaunchMode.externalApplication);
-                    } catch (_) {
-                      await launchUrl(
-                        Uri.parse('https://waze.com/ul?ll=${stop.lat},${stop.lng}&navigate=yes'),
-                        mode: LaunchMode.externalApplication,
-                      );
-                    }
+                      await launchUrl(uri, mode: LaunchMode.platformDefault);
+                    } catch (_) {}
                   },
                   icon: const Text('🗺️'),
                   label: const Text('פתח בוואיז',
