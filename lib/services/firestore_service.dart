@@ -67,6 +67,18 @@ class FirestoreService {
     });
   }
 
+  static Future<void> clearCompletedStops(String driverId) async {
+    final snap = await _db
+        .collection('completedStops')
+        .where('driverId', isEqualTo: driverId)
+        .get();
+    final batch = _db.batch();
+    for (final doc in snap.docs) {
+      batch.delete(doc.reference);
+    }
+    await batch.commit();
+  }
+
   static Stream<List<Map<String, dynamic>>> watchCompletedStops(String driverId) {
     return _db
         .collection('completedStops')

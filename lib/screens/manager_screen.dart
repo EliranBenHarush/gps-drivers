@@ -323,6 +323,53 @@ class _ManagerScreenState extends State<ManagerScreen> {
                               ],
                             ),
                           ),
+                          Padding(
+                            padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+                            child: OutlinedButton.icon(
+                              onPressed: () async {
+                                final ok = await showDialog<bool>(
+                                  context: ctx,
+                                  builder: (c) => Directionality(
+                                    textDirection: TextDirection.rtl,
+                                    child: AlertDialog(
+                                      title: const Text('איפוס נתונים'),
+                                      content: const Text(
+                                          'האם למחוק את כל הגבייות? פעולה זו אינה הפיכה.'),
+                                      actions: [
+                                        TextButton(
+                                          onPressed: () =>
+                                              Navigator.pop(c, false),
+                                          child: const Text('ביטול'),
+                                        ),
+                                        ElevatedButton(
+                                          onPressed: () =>
+                                              Navigator.pop(c, true),
+                                          style: ElevatedButton.styleFrom(
+                                              backgroundColor: Colors.red,
+                                              foregroundColor: Colors.white),
+                                          child: const Text('מחק הכל'),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                );
+                                if (ok == true) {
+                                  await FirestoreService.clearCompletedStops(
+                                      _selectedDriver!.id);
+                                }
+                              },
+                              icon: const Icon(Icons.delete_sweep,
+                                  color: Colors.red),
+                              label: const Text('איפוס נתונים',
+                                  style: TextStyle(color: Colors.red)),
+                              style: OutlinedButton.styleFrom(
+                                side: const BorderSide(color: Colors.red),
+                                minimumSize: const Size(double.infinity, 44),
+                                shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(12)),
+                              ),
+                            ),
+                          ),
                           Expanded(
                             child: ListView.builder(
                               controller: scroll,
