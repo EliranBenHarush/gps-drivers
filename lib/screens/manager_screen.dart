@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:uuid/uuid.dart';
 import '../models/driver.dart';
@@ -17,37 +18,55 @@ class _ManagerScreenState extends State<ManagerScreen> {
   List<RouteStop> _stops = [];
 
   final _searchCtrl = TextEditingController();
+  final _searchFocus = FocusNode();
   List<Map<String, dynamic>> _suggestions = [];
   bool _searching = false;
   bool _saving = false;
   final _uuid = const Uuid();
 
+  Timer? _debounce;
+  int _searchId = 0;
+
   @override
   void dispose() {
+    _debounce?.cancel();
     _searchCtrl.dispose();
+    _searchFocus.dispose();
     super.dispose();
   }
 
   // ─── פעולות על כתובות ─────────────────────────────────────────────────────
 
-  Future<void> _searchAddress(String query) async {
-    if (query.length < 2) {
-      setState(() => _suggestions = []);
+  void _onSearchChanged(String query) {
+    _debounce?.cancel();
+    if (query.trim().length < 2) {
+      setState(() { _suggestions = []; _searching = false; });
       return;
     }
     setState(() => _searching = true);
+    _debounce = Timer(const Duration(milliseconds: 450), () => _doSearch(query.trim()));
+  }
+
+  Future<void> _doSearch(String query) async {
+    final id = ++_searchId;
     final results = await MapboxService.geocode(query);
-    if (mounted) setState(() { _suggestions = results; _searching = false; });
+    if (mounted && id == _searchId) {
+      setState(() { _suggestions = results; _searching = false; });
+    }
   }
 
   Future<void> _addStop(Map<String, dynamic> place) async {
+    _debounce?.cancel();
     setState(() {
       _suggestions = [];
       _searchCtrl.clear();
+      _searching = false;
     });
+    _searchFocus.unfocus();
 
     final details = await _showStopDetailsDialog(
-      title: 'פרטי עצירה: ${place['name']}',
+      title: 'פרטי עצירה',
+      subtitle: place['name'] as String,
     );
     if (details == null) return;
 
@@ -88,6 +107,7 @@ class _ManagerScreenState extends State<ManagerScreen> {
     final stop = _stops[index];
     final details = await _showStopDetailsDialog(
       title: 'עריכת פרטים',
+      subtitle: stop.address,
       initial: {
         'phone1': stop.phone1,
         'phone2': stop.phone2,
@@ -106,6 +126,7 @@ class _ManagerScreenState extends State<ManagerScreen> {
 
   Future<Map<String, String>?> _showStopDetailsDialog({
     required String title,
+    String? subtitle,
     Map<String, String>? initial,
   }) async {
     final phone1Ctrl = TextEditingController(text: initial?['phone1'] ?? '');
@@ -117,19 +138,27 @@ class _ManagerScreenState extends State<ManagerScreen> {
       builder: (ctx) => Directionality(
         textDirection: TextDirection.rtl,
         child: AlertDialog(
-          title: Text(title, style: const TextStyle(fontSize: 15)),
+          title: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(title, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+              if (subtitle != null)
+                Text(subtitle,
+                    style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis),
+            ],
+          ),
           content: SingleChildScrollView(
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                _detailField(phone1Ctrl, 'טלפון 1', Icons.phone,
-                    TextInputType.phone),
+                _detailField(phone1Ctrl, 'טלפון 1', Icons.phone, TextInputType.phone),
                 const SizedBox(height: 12),
-                _detailField(phone2Ctrl, 'טלפון 2', Icons.phone_android,
-                    TextInputType.phone),
+                _detailField(phone2Ctrl, 'טלפון 2', Icons.phone_android, TextInputType.phone),
                 const SizedBox(height: 12),
-                _detailField(balanceCtrl, 'יתרה לגבייה (₪)',
-                    Icons.attach_money, TextInputType.number),
+                _detailField(balanceCtrl, 'יתרה לגבייה (₪)', Icons.attach_money, TextInputType.number),
               ],
             ),
           ),
@@ -219,8 +248,7 @@ class _ManagerScreenState extends State<ManagerScreen> {
                 ElevatedButton(
                     style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
                     onPressed: () => Navigator.pop(ctx, true),
-                    child:
-                        const Text('מחק', style: TextStyle(color: Colors.white))),
+                    child: const Text('מחק', style: TextStyle(color: Colors.white))),
               ],
             ),
           ),
@@ -255,8 +283,7 @@ class _ManagerScreenState extends State<ManagerScreen> {
                 child: SizedBox(
                   width: 20,
                   height: 20,
-                  child: CircularProgressIndicator(
-                      color: Colors.white, strokeWidth: 2),
+                  child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
                 ),
               )
             else
@@ -267,12 +294,23 @@ class _ManagerScreenState extends State<ManagerScreen> {
               ),
           ],
         ),
-        body: Column(
+        body: Stack(
           children: [
-            _buildDriverSelector(),
-            _buildSearchBar(),
-            if (_suggestions.isNotEmpty) _buildSuggestions(),
-            Expanded(child: _buildStopsList()),
+            Column(
+              children: [
+                _buildDriverSelector(),
+                _buildSearchBar(),
+                Expanded(child: _buildStopsList()),
+              ],
+            ),
+            // Suggestions float above the list
+            if (_suggestions.isNotEmpty || _searching)
+              Positioned(
+                top: 124,
+                left: 16,
+                right: 16,
+                child: _buildSuggestions(),
+              ),
           ],
         ),
         floatingActionButton: _stops.isNotEmpty
@@ -308,15 +346,12 @@ class _ManagerScreenState extends State<ManagerScreen> {
                       : null,
                   hint: const Text('בחר נהג'),
                   decoration: InputDecoration(
-                    border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(10)),
-                    contentPadding:
-                        const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                     isDense: true,
                   ),
                   items: drivers
-                      .map((d) =>
-                          DropdownMenuItem(value: d, child: Text(d.name)))
+                      .map((d) => DropdownMenuItem(value: d, child: Text(d.name)))
                       .toList(),
                   onChanged: (d) async {
                     setState(() {
@@ -324,8 +359,7 @@ class _ManagerScreenState extends State<ManagerScreen> {
                       _stops = [];
                     });
                     if (d != null) {
-                      final existing =
-                          await FirestoreService.watchRoute(d.id).first;
+                      final existing = await FirestoreService.watchRoute(d.id).first;
                       if (mounted) setState(() => _stops = List.from(existing));
                     }
                   },
@@ -346,6 +380,7 @@ class _ManagerScreenState extends State<ManagerScreen> {
       padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
       child: TextField(
         controller: _searchCtrl,
+        focusNode: _searchFocus,
         decoration: InputDecoration(
           hintText: 'חפש כתובת להוספה...',
           prefixIcon: _searching
@@ -361,39 +396,63 @@ class _ManagerScreenState extends State<ManagerScreen> {
               ? IconButton(
                   icon: const Icon(Icons.clear),
                   onPressed: () {
+                    _debounce?.cancel();
                     _searchCtrl.clear();
-                    setState(() => _suggestions = []);
+                    setState(() { _suggestions = []; _searching = false; });
                   },
                 )
               : null,
           border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
           isDense: true,
         ),
-        onChanged: _searchAddress,
+        onChanged: _onSearchChanged,
       ),
     );
   }
 
   Widget _buildSuggestions() {
-    return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 16),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(10),
-        boxShadow: const [BoxShadow(color: Colors.black26, blurRadius: 6)],
-      ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: _suggestions
-            .map((s) => ListTile(
-                  dense: true,
-                  leading:
-                      const Icon(Icons.location_on, color: Color(0xFF1565C0)),
-                  title: Text(s['name'] as String,
-                      style: const TextStyle(fontSize: 13)),
-                  onTap: () => _addStop(s),
-                ))
-            .toList(),
+    return Material(
+      elevation: 8,
+      borderRadius: BorderRadius.circular(12),
+      child: Container(
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: _searching && _suggestions.isEmpty
+            ? const Padding(
+                padding: EdgeInsets.all(16),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2)),
+                    SizedBox(width: 12),
+                    Text('מחפש...'),
+                  ],
+                ),
+              )
+            : Column(
+                mainAxisSize: MainAxisSize.min,
+                children: _suggestions
+                    .map((s) => InkWell(
+                          borderRadius: BorderRadius.circular(12),
+                          onTap: () => _addStop(s),
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                            child: Row(
+                              children: [
+                                const Icon(Icons.location_on, color: Color(0xFF1565C0), size: 20),
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  child: Text(s['name'] as String,
+                                      style: const TextStyle(fontSize: 13)),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ))
+                    .toList(),
+              ),
       ),
     );
   }
@@ -440,8 +499,7 @@ class _ManagerScreenState extends State<ManagerScreen> {
               return Card(
                 key: ValueKey(stop.id),
                 margin: const EdgeInsets.only(bottom: 8),
-                shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12)),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                 child: Padding(
                   padding: const EdgeInsets.symmetric(vertical: 4),
                   child: ListTile(
@@ -453,32 +511,28 @@ class _ManagerScreenState extends State<ManagerScreen> {
                           ? const Icon(Icons.flag, color: Colors.white, size: 18)
                           : Text('${i + 1}',
                               style: const TextStyle(
-                                  color: Colors.white,
-                                  fontWeight: FontWeight.bold)),
+                                  color: Colors.white, fontWeight: FontWeight.bold)),
                     ),
-                    title: Text(stop.address,
-                        style: const TextStyle(fontSize: 13)),
+                    title: Text(stop.address, style: const TextStyle(fontSize: 13)),
                     subtitle: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         if (i == 0)
                           const Text('נקודת התחלה',
-                              style: TextStyle(
-                                  color: Color(0xFF2E7D32), fontSize: 11))
+                              style: TextStyle(color: Color(0xFF2E7D32), fontSize: 11))
                         else if (i == _stops.length - 1)
                           const Text('נקודת סיום',
                               style: TextStyle(color: Colors.red, fontSize: 11)),
                         if (hasDetails)
                           Wrap(
-                            spacing: 6,
+                            spacing: 8,
                             children: [
                               if (stop.phone1.isNotEmpty)
                                 _miniChip(Icons.phone, stop.phone1),
                               if (stop.phone2.isNotEmpty)
                                 _miniChip(Icons.phone_android, stop.phone2),
                               if (stop.balance.isNotEmpty)
-                                _miniChip(Icons.attach_money,
-                                    '₪${stop.balance}',
+                                _miniChip(Icons.attach_money, '₪${stop.balance}',
                                     color: Colors.green),
                             ],
                           ),
@@ -567,8 +621,7 @@ class _ManagerScreenState extends State<ManagerScreen> {
     );
   }
 
-  Future<void> _submitAddDriver(
-      TextEditingController ctrl, BuildContext ctx) async {
+  Future<void> _submitAddDriver(TextEditingController ctrl, BuildContext ctx) async {
     if (ctrl.text.trim().isEmpty) return;
     await FirestoreService.addDriver(ctrl.text.trim());
     if (ctx.mounted) Navigator.pop(ctx);
