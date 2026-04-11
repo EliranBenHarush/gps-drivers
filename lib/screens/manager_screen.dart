@@ -83,13 +83,16 @@ class _ManagerScreenState extends State<ManagerScreen> {
     setState(() => _stops.add(stop));
   }
 
-  void _removeStop(int index) {
+  Future<void> _removeStop(int index) async {
     setState(() {
       _stops.removeAt(index);
       for (int i = 0; i < _stops.length; i++) {
         _stops[i] = _stops[i].copyWith(order: i);
       }
     });
+    if (_selectedDriver != null) {
+      await FirestoreService.saveRoute(_selectedDriver!.id, _stops);
+    }
   }
 
   void _reorderStop(int oldIndex, int newIndex) {

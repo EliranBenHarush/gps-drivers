@@ -144,6 +144,14 @@ class _DriverScreenState extends State<DriverScreen> {
     if (dist < 25) setState(() => _currentStep++);
   }
 
+  Future<void> _markStopDone(RouteStop stop) async {
+    final remaining = _stops.where((s) => s.id != stop.id).toList();
+    for (int i = 0; i < remaining.length; i++) {
+      remaining[i] = remaining[i].copyWith(order: i);
+    }
+    await FirestoreService.saveRoute(widget.driver.id, remaining);
+  }
+
   // ─── מפה ───────────────────────────────────────────────────────────────────
 
   void _fitAllStops() {
@@ -518,7 +526,7 @@ class _DriverScreenState extends State<DriverScreen> {
 
   Widget _buildStopCards() {
     return SizedBox(
-      height: 120,
+      height: 150,
       child: ListView.builder(
         scrollDirection: Axis.horizontal,
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
@@ -592,6 +600,24 @@ class _DriverScreenState extends State<DriverScreen> {
                             fontSize: 11,
                             fontWeight: FontWeight.bold,
                             color: Colors.green)),
+                  const SizedBox(height: 6),
+                  SizedBox(
+                    width: double.infinity,
+                    height: 28,
+                    child: ElevatedButton.icon(
+                      onPressed: () => _markStopDone(stop),
+                      icon: const Icon(Icons.check, size: 13),
+                      label: const Text('בוצע', style: TextStyle(fontSize: 11)),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFF2E7D32),
+                        foregroundColor: Colors.white,
+                        padding: EdgeInsets.zero,
+                        shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(8)),
+                        elevation: 0,
+                      ),
+                    ),
+                  ),
                 ],
               ),
             ),
