@@ -1,9 +1,10 @@
 import 'dart:async';
+// ignore: avoid_web_libraries_in_flutter
+import 'dart:html' as html;
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:geolocator/geolocator.dart';
-import 'package:url_launcher/url_launcher.dart';
 import '../config.dart';
 import '../models/driver.dart';
 import '../models/route_stop.dart';
@@ -851,12 +852,9 @@ class _DriverScreenState extends State<DriverScreen> {
               SizedBox(
                 width: double.infinity,
                 child: ElevatedButton.icon(
-                  onPressed: () async {
-                    final uri = Uri.parse(
-                        'https://waze.com/ul?ll=${stop.lat},${stop.lng}&navigate=yes');
-                    try {
-                      await launchUrl(uri, mode: LaunchMode.platformDefault);
-                    } catch (_) {}
+                  onPressed: () {
+                    html.window.location.href =
+                        'waze://ul?ll=${stop.lat},${stop.lng}&navigate=yes';
                   },
                   icon: const Text('🗺️'),
                   label: const Text('פתח בוואיז',
@@ -879,11 +877,8 @@ class _DriverScreenState extends State<DriverScreen> {
 
   Widget _phoneRow(String label, String phone, IconData icon) {
     return InkWell(
-      onTap: () async {
-        final uri = Uri.parse('tel:$phone');
-        try {
-          await launchUrl(uri);
-        } catch (_) {}
+      onTap: () {
+        html.window.location.href = 'tel:$phone';
       },
       borderRadius: BorderRadius.circular(10),
       child: Container(
