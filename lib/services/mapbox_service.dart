@@ -5,36 +5,55 @@ import '../models/route_stop.dart';
 import '../models/nav_step.dart';
 
 class MapboxService {
-  // ─── Geocoding: Nominatim (OpenStreetMap) ─────────────────────────────────
+  // ─── Geocoding: Photon (Komoot, OpenStreetMap data, supports CORS) ──────────
 
   static Future<List<Map<String, dynamic>>> geocode(String query) async {
     if (query.trim().length < 2) return [];
     final encoded = Uri.encodeComponent(query.trim());
+    // bbox = Israel bounding box: lon_min,lat_min,lon_max,lat_max
     final url = Uri.parse(
-      'https://nominatim.openstreetmap.org/search'
+      'https://photon.komoot.io/api/'
       '?q=$encoded'
-      '&format=json'
-      '&addressdetails=1'
+      '&lang=he'
       '&limit=5'
-      '&countrycodes=il'
-      '&accept-language=he',
+      '&bbox=34.2,29.4,35.9,33.3',
     );
     try {
       final res = await http.get(url, headers: {
         'User-Agent': 'gps-drivers-app/1.0',
       });
       if (res.statusCode != 200) return [];
-      final body = json.decode(res.body) as List;
-      return body.map((f) {
+      final body = json.decode(res.body) as Map<String, dynamic>;
+      final features = (body['features'] as List?) ?? [];
+      return features.map((f) {
+        final props = f['properties'] as Map<String, dynamic>;
+        final coords = (f['geometry']['coordinates'] as List);
+        final name = _buildPhotonName(props);
         return {
-          'name': f['display_name'] as String,
-          'lng': double.parse(f['lon'] as String),
-          'lat': double.parse(f['lat'] as String),
+          'name': name,
+          'lng': (coords[0] as num).toDouble(),
+          'lat': (coords[1] as num).toDouble(),
         };
       }).toList();
     } catch (_) {
       return [];
     }
+  }
+
+  static String _buildPhotonName(Map<String, dynamic> props) {
+    final parts = <String>[];
+    final street = props['street'] as String?;
+    final housenumber = props['housenumber'] as String?;
+    final name = props['name'] as String?;
+    final city = props['city'] as String?;
+
+    if (street != null) {
+      parts.add(housenumber != null ? '$street $housenumber' : street);
+    } else if (name != null) {
+      parts.add(name);
+    }
+    if (city != null) parts.add(city);
+    return parts.isNotEmpty ? parts.join(', ') : (props['display_name'] as String? ?? '');
   }
 
   // ─── Directions: OSRM (חינמי, ללא טוקן) ──────────────────────────────────
