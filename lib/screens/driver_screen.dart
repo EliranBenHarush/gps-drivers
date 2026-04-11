@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:geolocator/geolocator.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../config.dart';
 import '../models/driver.dart';
 import '../models/route_stop.dart';
@@ -219,23 +220,26 @@ class _DriverScreenState extends State<DriverScreen> {
       point: LatLng(stop.lat, stop.lng),
       width: 42,
       height: 42,
-      child: Container(
-        decoration: BoxDecoration(
-          color: isLast ? Colors.red : const Color(0xFF1565C0),
-          shape: BoxShape.circle,
-          border: Border.all(color: Colors.white, width: 2.5),
-          boxShadow: const [
-            BoxShadow(color: Colors.black38, blurRadius: 6, offset: Offset(0, 2))
-          ],
-        ),
-        child: Center(
-          child: isLast
-              ? const Icon(Icons.flag, color: Colors.white, size: 20)
-              : Text('${index + 1}',
-                  style: const TextStyle(
-                      color: Colors.white,
-                      fontWeight: FontWeight.bold,
-                      fontSize: 14)),
+      child: GestureDetector(
+        onTap: () => _showStopDetails(index, stop),
+        child: Container(
+          decoration: BoxDecoration(
+            color: isLast ? Colors.red : const Color(0xFF1565C0),
+            shape: BoxShape.circle,
+            border: Border.all(color: Colors.white, width: 2.5),
+            boxShadow: const [
+              BoxShadow(color: Colors.black38, blurRadius: 6, offset: Offset(0, 2))
+            ],
+          ),
+          child: Center(
+            child: isLast
+                ? const Icon(Icons.flag, color: Colors.white, size: 20)
+                : Text('${index + 1}',
+                    style: const TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 14)),
+          ),
         ),
       ),
     );
@@ -514,7 +518,7 @@ class _DriverScreenState extends State<DriverScreen> {
 
   Widget _buildStopCards() {
     return SizedBox(
-      height: 110,
+      height: 120,
       child: ListView.builder(
         scrollDirection: Axis.horizontal,
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
@@ -528,59 +532,254 @@ class _DriverScreenState extends State<DriverScreen> {
               : isLast
                   ? Colors.red
                   : const Color(0xFF1565C0);
-          return Container(
-            width: 150,
-            margin: const EdgeInsets.only(left: 10),
-            padding: const EdgeInsets.all(10),
-            decoration: BoxDecoration(
-              color: accent.withOpacity(0.06),
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: accent.withOpacity(0.3)),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    CircleAvatar(
-                      radius: 11,
-                      backgroundColor: accent,
-                      child: isLast
-                          ? const Icon(Icons.flag,
-                              color: Colors.white, size: 12)
-                          : Text('${i + 1}',
-                              style: const TextStyle(
-                                  color: Colors.white,
-                                  fontSize: 10,
-                                  fontWeight: FontWeight.bold)),
-                    ),
-                    const SizedBox(width: 6),
-                    Text(
-                      isFirst
-                          ? 'התחלה'
-                          : isLast
-                              ? 'סיום'
-                              : 'עצירה ${i + 1}',
-                      style: TextStyle(
-                          fontSize: 11,
-                          fontWeight: FontWeight.bold,
-                          color: accent),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 6),
-                Expanded(
-                  child: Text(
-                    stop.address,
-                    style: const TextStyle(fontSize: 11),
-                    maxLines: 3,
-                    overflow: TextOverflow.ellipsis,
+          return GestureDetector(
+            onTap: () => _showStopDetails(i, stop),
+            child: Container(
+              width: 160,
+              margin: const EdgeInsets.only(left: 10),
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: accent.withOpacity(0.06),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: accent.withOpacity(0.3)),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      CircleAvatar(
+                        radius: 11,
+                        backgroundColor: accent,
+                        child: isLast
+                            ? const Icon(Icons.flag,
+                                color: Colors.white, size: 12)
+                            : Text('${i + 1}',
+                                style: const TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.bold)),
+                      ),
+                      const SizedBox(width: 6),
+                      Expanded(
+                        child: Text(
+                          isFirst
+                              ? 'התחלה'
+                              : isLast
+                                  ? 'סיום'
+                                  : 'עצירה ${i + 1}',
+                          style: TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.bold,
+                              color: accent),
+                        ),
+                      ),
+                      const Icon(Icons.info_outline, size: 14, color: Colors.grey),
+                    ],
                   ),
-                ),
-              ],
+                  const SizedBox(height: 5),
+                  Expanded(
+                    child: Text(
+                      stop.address,
+                      style: const TextStyle(fontSize: 11),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                  if (stop.balance.isNotEmpty)
+                    Text('₪${stop.balance}',
+                        style: const TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.green)),
+                ],
+              ),
             ),
           );
         },
+      ),
+    );
+  }
+
+  void _showStopDetails(int index, RouteStop stop) {
+    final isFirst = index == 0;
+    final isLast = index == _stops.length - 1;
+    final accent = isFirst
+        ? Colors.green
+        : isLast
+            ? Colors.red
+            : const Color(0xFF1565C0);
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => Directionality(
+        textDirection: TextDirection.rtl,
+        child: Container(
+          decoration: const BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+          ),
+          padding: const EdgeInsets.fromLTRB(20, 16, 20, 32),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Handle
+              Center(
+                child: Container(
+                  width: 40,
+                  height: 4,
+                  decoration: BoxDecoration(
+                      color: Colors.grey[300],
+                      borderRadius: BorderRadius.circular(2)),
+                ),
+              ),
+              const SizedBox(height: 16),
+
+              // Title row
+              Row(
+                children: [
+                  CircleAvatar(
+                    backgroundColor: accent,
+                    radius: 18,
+                    child: isLast
+                        ? const Icon(Icons.flag, color: Colors.white, size: 18)
+                        : Text('${index + 1}',
+                            style: const TextStyle(
+                                color: Colors.white,
+                                fontWeight: FontWeight.bold)),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      isFirst
+                          ? 'נקודת התחלה'
+                          : isLast
+                              ? 'נקודת סיום'
+                              : 'עצירה ${index + 1}',
+                      style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 17,
+                          color: accent),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+
+              // Address
+              Row(
+                children: [
+                  const Icon(Icons.location_on, size: 18, color: Colors.grey),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(stop.address,
+                        style: const TextStyle(fontSize: 14)),
+                  ),
+                ],
+              ),
+              const Divider(height: 24),
+
+              // Phone 1
+              if (stop.phone1.isNotEmpty)
+                _phoneRow('טלפון 1', stop.phone1, Icons.phone),
+              if (stop.phone1.isNotEmpty) const SizedBox(height: 10),
+
+              // Phone 2
+              if (stop.phone2.isNotEmpty)
+                _phoneRow('טלפון 2', stop.phone2, Icons.phone_android),
+              if (stop.phone2.isNotEmpty) const SizedBox(height: 10),
+
+              // Balance
+              if (stop.balance.isNotEmpty)
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 14, vertical: 10),
+                  decoration: BoxDecoration(
+                    color: Colors.green.shade50,
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: Colors.green.shade200),
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.attach_money,
+                          color: Colors.green, size: 20),
+                      const SizedBox(width: 8),
+                      const Text('יתרה לגבייה:',
+                          style: TextStyle(fontSize: 14)),
+                      const Spacer(),
+                      Text('₪${stop.balance}',
+                          style: const TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.green)),
+                    ],
+                  ),
+                ),
+              if (stop.balance.isNotEmpty) const SizedBox(height: 16),
+
+              // Waze button
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton.icon(
+                  onPressed: () async {
+                    final uri = Uri.parse(stop.wazeUrl);
+                    if (await canLaunchUrl(uri)) {
+                      await launchUrl(uri,
+                          mode: LaunchMode.externalApplication);
+                    }
+                  },
+                  icon: const Text('🗺️'),
+                  label: const Text('פתח בוואיז',
+                      style: TextStyle(fontSize: 16)),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF00AAFF),
+                    foregroundColor: Colors.white,
+                    minimumSize: const Size(double.infinity, 50),
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12)),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _phoneRow(String label, String phone, IconData icon) {
+    return InkWell(
+      onTap: () async {
+        final uri = Uri.parse('tel:$phone');
+        if (await canLaunchUrl(uri)) {
+          await launchUrl(uri);
+        }
+      },
+      borderRadius: BorderRadius.circular(10),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+        decoration: BoxDecoration(
+          color: Colors.blue.shade50,
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: Colors.blue.shade200),
+        ),
+        child: Row(
+          children: [
+            Icon(icon, color: const Color(0xFF1565C0), size: 20),
+            const SizedBox(width: 8),
+            Text(label,
+                style: const TextStyle(fontSize: 13, color: Colors.grey)),
+            const Spacer(),
+            Text(phone,
+                style: const TextStyle(
+                    fontSize: 16, fontWeight: FontWeight.bold)),
+            const SizedBox(width: 8),
+            const Icon(Icons.call, color: Color(0xFF1565C0), size: 18),
+          ],
+        ),
       ),
     );
   }

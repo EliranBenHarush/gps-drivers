@@ -40,19 +40,28 @@ class _ManagerScreenState extends State<ManagerScreen> {
     if (mounted) setState(() { _suggestions = results; _searching = false; });
   }
 
-  void _addStop(Map<String, dynamic> place) {
+  Future<void> _addStop(Map<String, dynamic> place) async {
+    setState(() {
+      _suggestions = [];
+      _searchCtrl.clear();
+    });
+
+    final details = await _showStopDetailsDialog(
+      title: 'פרטי עצירה: ${place['name']}',
+    );
+    if (details == null) return;
+
     final stop = RouteStop(
       id: _uuid.v4(),
       address: place['name'] as String,
       lat: place['lat'] as double,
       lng: place['lng'] as double,
       order: _stops.length,
+      phone1: details['phone1'] ?? '',
+      phone2: details['phone2'] ?? '',
+      balance: details['balance'] ?? '',
     );
-    setState(() {
-      _stops.add(stop);
-      _suggestions = [];
-      _searchCtrl.clear();
-    });
+    setState(() => _stops.add(stop));
   }
 
   void _removeStop(int index) {
@@ -73,6 +82,93 @@ class _ManagerScreenState extends State<ManagerScreen> {
         _stops[i] = _stops[i].copyWith(order: i);
       }
     });
+  }
+
+  Future<void> _editStop(int index) async {
+    final stop = _stops[index];
+    final details = await _showStopDetailsDialog(
+      title: 'עריכת פרטים',
+      initial: {
+        'phone1': stop.phone1,
+        'phone2': stop.phone2,
+        'balance': stop.balance,
+      },
+    );
+    if (details == null) return;
+    setState(() {
+      _stops[index] = stop.copyWith(
+        phone1: details['phone1'],
+        phone2: details['phone2'],
+        balance: details['balance'],
+      );
+    });
+  }
+
+  Future<Map<String, String>?> _showStopDetailsDialog({
+    required String title,
+    Map<String, String>? initial,
+  }) async {
+    final phone1Ctrl = TextEditingController(text: initial?['phone1'] ?? '');
+    final phone2Ctrl = TextEditingController(text: initial?['phone2'] ?? '');
+    final balanceCtrl = TextEditingController(text: initial?['balance'] ?? '');
+
+    final result = await showDialog<Map<String, String>>(
+      context: context,
+      builder: (ctx) => Directionality(
+        textDirection: TextDirection.rtl,
+        child: AlertDialog(
+          title: Text(title, style: const TextStyle(fontSize: 15)),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                _detailField(phone1Ctrl, 'טלפון 1', Icons.phone,
+                    TextInputType.phone),
+                const SizedBox(height: 12),
+                _detailField(phone2Ctrl, 'טלפון 2', Icons.phone_android,
+                    TextInputType.phone),
+                const SizedBox(height: 12),
+                _detailField(balanceCtrl, 'יתרה לגבייה (₪)',
+                    Icons.attach_money, TextInputType.number),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('ביטול'),
+            ),
+            ElevatedButton(
+              onPressed: () => Navigator.pop(ctx, {
+                'phone1': phone1Ctrl.text.trim(),
+                'phone2': phone2Ctrl.text.trim(),
+                'balance': balanceCtrl.text.trim(),
+              }),
+              child: const Text('אישור'),
+            ),
+          ],
+        ),
+      ),
+    );
+
+    phone1Ctrl.dispose();
+    phone2Ctrl.dispose();
+    balanceCtrl.dispose();
+    return result;
+  }
+
+  Widget _detailField(TextEditingController ctrl, String label, IconData icon,
+      TextInputType type) {
+    return TextField(
+      controller: ctrl,
+      keyboardType: type,
+      decoration: InputDecoration(
+        labelText: label,
+        prefixIcon: Icon(icon, size: 20),
+        border: const OutlineInputBorder(),
+        isDense: true,
+      ),
+    );
   }
 
   Future<void> _saveRoute() async {
@@ -338,50 +434,91 @@ class _ManagerScreenState extends State<ManagerScreen> {
             onReorder: _reorderStop,
             itemBuilder: (ctx, i) {
               final stop = _stops[i];
+              final hasDetails = stop.phone1.isNotEmpty ||
+                  stop.phone2.isNotEmpty ||
+                  stop.balance.isNotEmpty;
               return Card(
                 key: ValueKey(stop.id),
                 margin: const EdgeInsets.only(bottom: 8),
                 shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(12)),
-                child: ListTile(
-                  leading: CircleAvatar(
-                    backgroundColor: i == _stops.length - 1
-                        ? Colors.red
-                        : const Color(0xFF1565C0),
-                    child: i == _stops.length - 1
-                        ? const Icon(Icons.flag, color: Colors.white, size: 18)
-                        : Text('${i + 1}',
-                            style: const TextStyle(
-                                color: Colors.white,
-                                fontWeight: FontWeight.bold)),
-                  ),
-                  title: Text(stop.address,
-                      style: const TextStyle(fontSize: 13)),
-                  subtitle: i == 0
-                      ? const Text('נקודת התחלה',
-                          style: TextStyle(
-                              color: Color(0xFF2E7D32), fontSize: 11))
-                      : i == _stops.length - 1
-                          ? const Text('נקודת סיום',
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 4),
+                  child: ListTile(
+                    leading: CircleAvatar(
+                      backgroundColor: i == _stops.length - 1
+                          ? Colors.red
+                          : const Color(0xFF1565C0),
+                      child: i == _stops.length - 1
+                          ? const Icon(Icons.flag, color: Colors.white, size: 18)
+                          : Text('${i + 1}',
+                              style: const TextStyle(
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.bold)),
+                    ),
+                    title: Text(stop.address,
+                        style: const TextStyle(fontSize: 13)),
+                    subtitle: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        if (i == 0)
+                          const Text('נקודת התחלה',
                               style: TextStyle(
-                                  color: Colors.red, fontSize: 11))
-                          : null,
-                  trailing: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      IconButton(
-                        icon: const Icon(Icons.delete_outline,
-                            color: Colors.red, size: 20),
-                        onPressed: () => _removeStop(i),
-                      ),
-                      const Icon(Icons.drag_handle, color: Colors.grey),
-                    ],
+                                  color: Color(0xFF2E7D32), fontSize: 11))
+                        else if (i == _stops.length - 1)
+                          const Text('נקודת סיום',
+                              style: TextStyle(color: Colors.red, fontSize: 11)),
+                        if (hasDetails)
+                          Wrap(
+                            spacing: 6,
+                            children: [
+                              if (stop.phone1.isNotEmpty)
+                                _miniChip(Icons.phone, stop.phone1),
+                              if (stop.phone2.isNotEmpty)
+                                _miniChip(Icons.phone_android, stop.phone2),
+                              if (stop.balance.isNotEmpty)
+                                _miniChip(Icons.attach_money,
+                                    '₪${stop.balance}',
+                                    color: Colors.green),
+                            ],
+                          ),
+                      ],
+                    ),
+                    trailing: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        IconButton(
+                          icon: const Icon(Icons.edit_outlined,
+                              color: Color(0xFF1565C0), size: 20),
+                          tooltip: 'ערוך פרטים',
+                          onPressed: () => _editStop(i),
+                        ),
+                        IconButton(
+                          icon: const Icon(Icons.delete_outline,
+                              color: Colors.red, size: 20),
+                          onPressed: () => _removeStop(i),
+                        ),
+                        const Icon(Icons.drag_handle, color: Colors.grey),
+                      ],
+                    ),
                   ),
                 ),
               );
             },
           ),
         ),
+      ],
+    );
+  }
+
+  Widget _miniChip(IconData icon, String text, {Color? color}) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(icon, size: 11, color: color ?? Colors.grey[600]),
+        const SizedBox(width: 2),
+        Text(text,
+            style: TextStyle(fontSize: 11, color: color ?? Colors.grey[700])),
       ],
     );
   }
