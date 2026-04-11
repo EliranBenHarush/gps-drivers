@@ -605,7 +605,32 @@ class _DriverScreenState extends State<DriverScreen> {
                     width: double.infinity,
                     height: 28,
                     child: ElevatedButton.icon(
-                      onPressed: () => _markStopDone(stop),
+                      onPressed: () async {
+                        final confirmed = await showDialog<bool>(
+                          context: context,
+                          builder: (ctx) => Directionality(
+                            textDirection: TextDirection.rtl,
+                            child: AlertDialog(
+                              title: const Text('אישור סיום משלוח'),
+                              content: const Text('האם אתה בטוח שסיימת את המשלוח?'),
+                              actions: [
+                                TextButton(
+                                  onPressed: () => Navigator.pop(ctx, false),
+                                  child: const Text('ביטול'),
+                                ),
+                                ElevatedButton(
+                                  onPressed: () => Navigator.pop(ctx, true),
+                                  style: ElevatedButton.styleFrom(
+                                      backgroundColor: const Color(0xFF2E7D32),
+                                      foregroundColor: Colors.white),
+                                  child: const Text('אישור'),
+                                ),
+                              ],
+                            ),
+                          ),
+                        );
+                        if (confirmed == true) _markStopDone(stop);
+                      },
                       icon: const Icon(Icons.check, size: 13),
                       label: const Text('בוצע', style: TextStyle(fontSize: 11)),
                       style: ElevatedButton.styleFrom(

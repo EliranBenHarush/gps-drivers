@@ -14,6 +14,68 @@ class LoginScreen extends StatefulWidget {
 class _LoginScreenState extends State<LoginScreen> {
   bool _showDriverList = false;
 
+  Future<bool> _showPinDialog(String correctPin) async {
+    final ctrl = TextEditingController();
+    bool? result = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) {
+        bool hasError = false;
+        return Directionality(
+          textDirection: TextDirection.rtl,
+          child: StatefulBuilder(
+            builder: (ctx, setS) => AlertDialog(
+              title: const Text('הזן קוד גישה'),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  TextField(
+                    controller: ctrl,
+                    obscureText: true,
+                    keyboardType: TextInputType.number,
+                    autofocus: true,
+                    decoration: InputDecoration(
+                      labelText: 'קוד',
+                      border: const OutlineInputBorder(),
+                      errorText: hasError ? 'קוד שגוי, נסה שוב' : null,
+                    ),
+                    onSubmitted: (_) {
+                      if (ctrl.text == correctPin) {
+                        Navigator.pop(ctx, true);
+                      } else {
+                        setS(() => hasError = true);
+                        ctrl.clear();
+                      }
+                    },
+                  ),
+                ],
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(ctx, false),
+                  child: const Text('ביטול'),
+                ),
+                ElevatedButton(
+                  onPressed: () {
+                    if (ctrl.text == correctPin) {
+                      Navigator.pop(ctx, true);
+                    } else {
+                      setS(() => hasError = true);
+                      ctrl.clear();
+                    }
+                  },
+                  child: const Text('כניסה'),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+    ctrl.dispose();
+    return result == true;
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -81,10 +143,15 @@ class _LoginScreenState extends State<LoginScreen> {
           title: 'מנהל',
           subtitle: 'ניהול נהגים ומסלולים',
           color: const Color(0xFF1565C0),
-          onTap: () => Navigator.push(
-            context,
-            MaterialPageRoute(builder: (_) => const ManagerScreen()),
-          ),
+          onTap: () async {
+            final ok = await _showPinDialog('001324');
+            if (ok && mounted) {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const ManagerScreen()),
+              );
+            }
+          },
         ),
         const SizedBox(height: 16),
         _RoleCard(
@@ -144,12 +211,17 @@ class _LoginScreenState extends State<LoginScreen> {
                                   const TextStyle(fontWeight: FontWeight.w600)),
                           trailing:
                               const Icon(Icons.arrow_forward_ios, size: 16),
-                          onTap: () => Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (_) => DriverScreen(driver: d),
-                            ),
-                          ),
+                          onTap: () async {
+                            final ok = await _showPinDialog('1111');
+                            if (ok && mounted) {
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (_) => DriverScreen(driver: d),
+                                ),
+                              );
+                            }
+                          },
                         ),
                       ))
                   .toList(),
