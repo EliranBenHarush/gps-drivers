@@ -314,6 +314,7 @@ class _DriverScreenState extends State<DriverScreen> {
       expectedBalance: stop.balance,
       collectedAmount: amount,
       paymentMethod: method,
+      accountNumber: stop.accountNumber,
     );
 
     // הסרת העצירה מהמסלול

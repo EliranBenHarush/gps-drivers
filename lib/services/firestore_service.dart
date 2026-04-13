@@ -57,6 +57,7 @@ class FirestoreService {
     required String expectedBalance,
     required String collectedAmount,
     required String paymentMethod,
+    String accountNumber = '',
   }) {
     return _db.collection('completedStops').add({
       'driverId': driverId,
@@ -65,6 +66,7 @@ class FirestoreService {
       'expectedBalance': expectedBalance,
       'collectedAmount': collectedAmount,
       'paymentMethod': paymentMethod,
+      'accountNumber': accountNumber,
       'timestamp': FieldValue.serverTimestamp(),
     });
   }

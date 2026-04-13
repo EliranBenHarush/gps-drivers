@@ -435,6 +435,8 @@ class _ManagerScreenState extends State<ManagerScreen> {
                                     item['address'] as String? ?? '';
                                 final paymentMethod =
                                     item['paymentMethod'] as String? ?? '';
+                                final accountNumber =
+                                    item['accountNumber'] as String? ?? '';
                                 final methodColor = _paymentColor(paymentMethod);
                                 return Card(
                                   margin: const EdgeInsets.only(bottom: 8),
@@ -465,6 +467,12 @@ class _ManagerScreenState extends State<ManagerScreen> {
                                                   maxLines: 2,
                                                   overflow:
                                                       TextOverflow.ellipsis),
+                                              if (accountNumber.isNotEmpty)
+                                                Text('#$accountNumber',
+                                                    style: const TextStyle(
+                                                        fontSize: 12,
+                                                        color: Colors.indigo,
+                                                        fontWeight: FontWeight.bold)),
                                               if (expected.isNotEmpty)
                                                 Text('יתרה: ₪$expected',
                                                     style: TextStyle(
