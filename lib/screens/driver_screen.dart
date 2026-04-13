@@ -810,6 +810,34 @@ class _DriverScreenState extends State<DriverScreen> {
               ),
               const Divider(height: 24),
 
+              // Account number
+              if (stop.accountNumber.isNotEmpty) ...[
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                  decoration: BoxDecoration(
+                    color: Colors.indigo.shade50,
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: Colors.indigo.shade200),
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.receipt_outlined,
+                          color: Colors.indigo, size: 20),
+                      const SizedBox(width: 8),
+                      const Text('חשבון עסקה:',
+                          style: TextStyle(fontSize: 14)),
+                      const Spacer(),
+                      Text('#${stop.accountNumber}',
+                          style: const TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.indigo)),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 10),
+              ],
+
               // Phone 1
               if (stop.phone1.isNotEmpty)
                 _phoneRow('טלפון 1', stop.phone1, Icons.phone),

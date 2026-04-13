@@ -76,6 +76,7 @@ class _ManagerScreenState extends State<ManagerScreen> {
       lat: place['lat'] as double,
       lng: place['lng'] as double,
       order: _stops.length,
+      accountNumber: details['accountNumber'] ?? '',
       phone1: details['phone1'] ?? '',
       phone2: details['phone2'] ?? '',
       balance: details['balance'] ?? '',
@@ -112,6 +113,7 @@ class _ManagerScreenState extends State<ManagerScreen> {
       title: 'עריכת פרטים',
       subtitle: stop.address,
       initial: {
+        'accountNumber': stop.accountNumber,
         'phone1': stop.phone1,
         'phone2': stop.phone2,
         'balance': stop.balance,
@@ -120,6 +122,7 @@ class _ManagerScreenState extends State<ManagerScreen> {
     if (details == null) return;
     setState(() {
       _stops[index] = stop.copyWith(
+        accountNumber: details['accountNumber'],
         phone1: details['phone1'],
         phone2: details['phone2'],
         balance: details['balance'],
@@ -132,6 +135,7 @@ class _ManagerScreenState extends State<ManagerScreen> {
     String? subtitle,
     Map<String, String>? initial,
   }) async {
+    final accountCtrl = TextEditingController(text: initial?['accountNumber'] ?? '');
     final phone1Ctrl = TextEditingController(text: initial?['phone1'] ?? '');
     final phone2Ctrl = TextEditingController(text: initial?['phone2'] ?? '');
     final balanceCtrl = TextEditingController(text: initial?['balance'] ?? '');
@@ -157,6 +161,8 @@ class _ManagerScreenState extends State<ManagerScreen> {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
+                _detailField(accountCtrl, 'חשבון עסקה', Icons.receipt_outlined, TextInputType.number),
+                const SizedBox(height: 12),
                 _detailField(phone1Ctrl, 'טלפון 1', Icons.phone, TextInputType.phone),
                 const SizedBox(height: 12),
                 _detailField(phone2Ctrl, 'טלפון 2', Icons.phone_android, TextInputType.phone),
@@ -172,6 +178,7 @@ class _ManagerScreenState extends State<ManagerScreen> {
             ),
             ElevatedButton(
               onPressed: () => Navigator.pop(ctx, {
+                'accountNumber': accountCtrl.text.trim(),
                 'phone1': phone1Ctrl.text.trim(),
                 'phone2': phone2Ctrl.text.trim(),
                 'balance': balanceCtrl.text.trim(),
@@ -183,6 +190,7 @@ class _ManagerScreenState extends State<ManagerScreen> {
       ),
     );
 
+    accountCtrl.dispose();
     phone1Ctrl.dispose();
     phone2Ctrl.dispose();
     balanceCtrl.dispose();
@@ -751,7 +759,8 @@ class _ManagerScreenState extends State<ManagerScreen> {
             onReorder: _reorderStop,
             itemBuilder: (ctx, i) {
               final stop = _stops[i];
-              final hasDetails = stop.phone1.isNotEmpty ||
+              final hasDetails = stop.accountNumber.isNotEmpty ||
+                  stop.phone1.isNotEmpty ||
                   stop.phone2.isNotEmpty ||
                   stop.balance.isNotEmpty;
               return Card(
@@ -785,6 +794,9 @@ class _ManagerScreenState extends State<ManagerScreen> {
                           Wrap(
                             spacing: 8,
                             children: [
+                              if (stop.accountNumber.isNotEmpty)
+                                _miniChip(Icons.receipt_outlined, '#${stop.accountNumber}',
+                                    color: Colors.indigo),
                               if (stop.phone1.isNotEmpty)
                                 _miniChip(Icons.phone, stop.phone1),
                               if (stop.phone2.isNotEmpty)

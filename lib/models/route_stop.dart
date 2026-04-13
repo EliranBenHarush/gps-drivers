@@ -4,6 +4,7 @@ class RouteStop {
   final double lat;
   final double lng;
   final int order;
+  final String accountNumber;
   final String phone1;
   final String phone2;
   final String balance;
@@ -14,6 +15,7 @@ class RouteStop {
     required this.lat,
     required this.lng,
     required this.order,
+    this.accountNumber = '',
     this.phone1 = '',
     this.phone2 = '',
     this.balance = '',
@@ -26,6 +28,7 @@ class RouteStop {
       lat: (map['lat'] as num?)?.toDouble() ?? 0,
       lng: (map['lng'] as num?)?.toDouble() ?? 0,
       order: (map['order'] as num?)?.toInt() ?? 0,
+      accountNumber: map['accountNumber'] as String? ?? '',
       phone1: map['phone1'] as String? ?? '',
       phone2: map['phone2'] as String? ?? '',
       balance: map['balance'] as String? ?? '',
@@ -38,6 +41,7 @@ class RouteStop {
         'lat': lat,
         'lng': lng,
         'order': order,
+        'accountNumber': accountNumber,
         'phone1': phone1,
         'phone2': phone2,
         'balance': balance,
@@ -45,6 +49,7 @@ class RouteStop {
 
   RouteStop copyWith({
     int? order,
+    String? accountNumber,
     String? phone1,
     String? phone2,
     String? balance,
@@ -55,6 +60,7 @@ class RouteStop {
         lat: lat,
         lng: lng,
         order: order ?? this.order,
+        accountNumber: accountNumber ?? this.accountNumber,
         phone1: phone1 ?? this.phone1,
         phone2: phone2 ?? this.phone2,
         balance: balance ?? this.balance,
