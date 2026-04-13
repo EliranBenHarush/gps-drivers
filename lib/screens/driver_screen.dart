@@ -190,66 +190,121 @@ class _DriverScreenState extends State<DriverScreen> {
     );
     if (confirmed != true || !mounted) return;
 
-    // שלב 2: הזנת סכום גבייה
+    // שלב 2: הזנת סכום ואמצעי תשלום
     final ctrl = TextEditingController(text: stop.balance);
-    final amount = await showDialog<String>(
+    final paymentMethods = ['מזומן', 'אשראי', 'העברה', 'ביט', "צ'ק"];
+    final result = await showDialog<Map<String, String>>(
       context: context,
-      builder: (ctx) => Directionality(
-        textDirection: TextDirection.rtl,
-        child: AlertDialog(
-          title: const Text('גבייה מהלקוח'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              if (stop.balance.isNotEmpty)
-                Container(
-                  margin: const EdgeInsets.only(bottom: 14),
-                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                  decoration: BoxDecoration(
-                    color: Colors.green.shade50,
-                    borderRadius: BorderRadius.circular(10),
-                    border: Border.all(color: Colors.green.shade200),
+      builder: (ctx) {
+        String selectedMethod = 'מזומן';
+        return Directionality(
+          textDirection: TextDirection.rtl,
+          child: StatefulBuilder(
+            builder: (ctx, setS) => AlertDialog(
+              title: const Text('גבייה מהלקוח'),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (stop.balance.isNotEmpty)
+                    Container(
+                      margin: const EdgeInsets.only(bottom: 14),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 14, vertical: 10),
+                      decoration: BoxDecoration(
+                        color: Colors.green.shade50,
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(color: Colors.green.shade200),
+                      ),
+                      child: Row(
+                        children: [
+                          const Icon(Icons.attach_money, color: Colors.green),
+                          const SizedBox(width: 6),
+                          Text('יתרה לגבייה: ₪${stop.balance}',
+                              style: const TextStyle(
+                                  fontWeight: FontWeight.bold, fontSize: 15)),
+                        ],
+                      ),
+                    ),
+                  TextField(
+                    controller: ctrl,
+                    keyboardType: TextInputType.number,
+                    autofocus: true,
+                    decoration: const InputDecoration(
+                      labelText: 'סכום שנגבה (₪)',
+                      border: OutlineInputBorder(),
+                      prefixText: '₪ ',
+                    ),
                   ),
-                  child: Row(
-                    children: [
-                      const Icon(Icons.attach_money, color: Colors.green),
-                      const SizedBox(width: 6),
-                      Text('יתרה לגבייה: ₪${stop.balance}',
-                          style: const TextStyle(
-                              fontWeight: FontWeight.bold, fontSize: 15)),
-                    ],
+                  const SizedBox(height: 14),
+                  Align(
+                    alignment: Alignment.centerRight,
+                    child: Text('אמצעי תשלום',
+                        style: TextStyle(
+                            fontSize: 13, color: Colors.grey[600])),
                   ),
-                ),
-              TextField(
-                controller: ctrl,
-                keyboardType: TextInputType.number,
-                autofocus: true,
-                decoration: const InputDecoration(
-                  labelText: 'סכום שנגבה (₪)',
-                  border: OutlineInputBorder(),
-                  prefixText: '₪ ',
-                ),
+                  const SizedBox(height: 8),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: paymentMethods.map((method) {
+                      final selected = method == selectedMethod;
+                      return GestureDetector(
+                        onTap: () => setS(() => selectedMethod = method),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 14, vertical: 8),
+                          decoration: BoxDecoration(
+                            color: selected
+                                ? const Color(0xFF2E7D32)
+                                : Colors.grey[100],
+                            borderRadius: BorderRadius.circular(20),
+                            border: Border.all(
+                              color: selected
+                                  ? const Color(0xFF2E7D32)
+                                  : Colors.grey[300]!,
+                            ),
+                          ),
+                          child: Text(
+                            method,
+                            style: TextStyle(
+                              fontSize: 13,
+                              fontWeight: selected
+                                  ? FontWeight.bold
+                                  : FontWeight.normal,
+                              color: selected ? Colors.white : Colors.grey[700],
+                            ),
+                          ),
+                        ),
+                      );
+                    }).toList(),
+                  ),
+                ],
               ),
-            ],
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(ctx, null),
+                  child: const Text('ביטול'),
+                ),
+                ElevatedButton(
+                  onPressed: () => Navigator.pop(ctx, {
+                    'amount': ctrl.text.trim(),
+                    'method': selectedMethod,
+                  }),
+                  style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF2E7D32),
+                      foregroundColor: Colors.white),
+                  child: const Text('אישור'),
+                ),
+              ],
+            ),
           ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(ctx, null),
-              child: const Text('ביטול'),
-            ),
-            ElevatedButton(
-              onPressed: () => Navigator.pop(ctx, ctrl.text.trim()),
-              style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFF2E7D32),
-                  foregroundColor: Colors.white),
-              child: const Text('אישור'),
-            ),
-          ],
-        ),
-      ),
+        );
+      },
     );
     ctrl.dispose();
-    if (amount == null || !mounted) return;
+    if (result == null || !mounted) return;
+    final amount = result['amount'] ?? '';
+    final method = result['method'] ?? 'מזומן';
 
     // שמירת רשומת גבייה
     await FirestoreService.saveCompletedStop(
@@ -258,6 +313,7 @@ class _DriverScreenState extends State<DriverScreen> {
       address: stop.address,
       expectedBalance: stop.balance,
       collectedAmount: amount,
+      paymentMethod: method,
     );
 
     // הסרת העצירה מהמסלול

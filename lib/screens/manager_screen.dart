@@ -433,6 +433,9 @@ class _ManagerScreenState extends State<ManagerScreen> {
                                     item['expectedBalance'] as String? ?? '';
                                 final address =
                                     item['address'] as String? ?? '';
+                                final paymentMethod =
+                                    item['paymentMethod'] as String? ?? '';
+                                final methodColor = _paymentColor(paymentMethod);
                                 return Card(
                                   margin: const EdgeInsets.only(bottom: 8),
                                   shape: RoundedRectangleBorder(
@@ -467,6 +470,23 @@ class _ManagerScreenState extends State<ManagerScreen> {
                                                     style: TextStyle(
                                                         fontSize: 11,
                                                         color: Colors.grey[600])),
+                                              if (paymentMethod.isNotEmpty)
+                                                Container(
+                                                  margin: const EdgeInsets.only(top: 4),
+                                                  padding: const EdgeInsets.symmetric(
+                                                      horizontal: 8, vertical: 2),
+                                                  decoration: BoxDecoration(
+                                                    color: methodColor.withOpacity(0.12),
+                                                    borderRadius: BorderRadius.circular(10),
+                                                    border: Border.all(
+                                                        color: methodColor.withOpacity(0.4)),
+                                                  ),
+                                                  child: Text(paymentMethod,
+                                                      style: TextStyle(
+                                                          fontSize: 11,
+                                                          color: methodColor,
+                                                          fontWeight: FontWeight.bold)),
+                                                ),
                                             ],
                                           ),
                                         ),
@@ -1004,6 +1024,17 @@ class _ManagerScreenState extends State<ManagerScreen> {
         ),
       ],
     );
+  }
+
+  Color _paymentColor(String method) {
+    switch (method) {
+      case 'מזומן': return Colors.green;
+      case 'אשראי': return Colors.blue;
+      case 'העברה': return Colors.purple;
+      case 'ביט': return const Color(0xFFE91E8C);
+      case "צ'ק": return Colors.orange;
+      default: return Colors.grey;
+    }
   }
 
   Widget _miniChip(IconData icon, String text, {Color? color}) {
