@@ -15,7 +15,37 @@ class ManagerScreen extends StatefulWidget {
 
 class _ManagerScreenState extends State<ManagerScreen> {
   Driver? _selectedDriver;
-  List<RouteStop> _stops = [];
+  List<RouteStop> _stops = []; // all stops across all dates
+  String _workingDate = _dateStr(DateTime.now());
+
+  static String _dateStr(DateTime d) =>
+      '${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
+
+  List<RouteStop> get _dateStops {
+    final filtered = _stops.where((s) => s.date == _workingDate).toList();
+    filtered.sort((a, b) => a.order.compareTo(b.order));
+    return filtered;
+  }
+
+  Set<String> get _existingDates {
+    final dates = _stops.map((s) => s.date).where((d) => d.isNotEmpty).toSet();
+    return dates;
+  }
+
+  String _formatDateLabel(String dateStr) {
+    try {
+      final d = DateTime.parse(dateStr);
+      final today = DateTime.now();
+      final todayStr = _dateStr(today);
+      final tomorrowStr = _dateStr(today.add(const Duration(days: 1)));
+      if (dateStr == todayStr) return 'היום';
+      if (dateStr == tomorrowStr) return 'מחר';
+      const days = ['שני', 'שלישי', 'רביעי', 'חמישי', 'שישי', 'שבת', 'ראשון'];
+      return 'יום ${days[d.weekday - 1]} ${d.day}/${d.month}';
+    } catch (_) {
+      return dateStr;
+    }
+  }
 
   final _searchCtrl = TextEditingController();
   final _searchFocus = FocusNode();
@@ -70,12 +100,14 @@ class _ManagerScreenState extends State<ManagerScreen> {
     );
     if (details == null) return;
 
+    final dateOrder = _dateStops.length;
     final stop = RouteStop(
       id: _uuid.v4(),
       address: place['name'] as String,
       lat: place['lat'] as double,
       lng: place['lng'] as double,
-      order: _stops.length,
+      order: dateOrder,
+      date: _workingDate,
       accountNumber: details['accountNumber'] ?? '',
       phone1: details['phone1'] ?? '',
       phone2: details['phone2'] ?? '',
@@ -85,10 +117,15 @@ class _ManagerScreenState extends State<ManagerScreen> {
   }
 
   Future<void> _removeStop(int index) async {
+    final dateStops = _dateStops;
+    final stopId = dateStops[index].id;
     setState(() {
-      _stops.removeAt(index);
-      for (int i = 0; i < _stops.length; i++) {
-        _stops[i] = _stops[i].copyWith(order: i);
+      _stops.removeWhere((s) => s.id == stopId);
+      // re-number within date
+      final remaining = _dateStops;
+      for (int i = 0; i < remaining.length; i++) {
+        final idx = _stops.indexWhere((s) => s.id == remaining[i].id);
+        if (idx != -1) _stops[idx] = _stops[idx].copyWith(order: i);
       }
     });
     if (_selectedDriver != null) {
@@ -99,16 +136,18 @@ class _ManagerScreenState extends State<ManagerScreen> {
   void _reorderStop(int oldIndex, int newIndex) {
     setState(() {
       if (newIndex > oldIndex) newIndex--;
-      final item = _stops.removeAt(oldIndex);
-      _stops.insert(newIndex, item);
-      for (int i = 0; i < _stops.length; i++) {
-        _stops[i] = _stops[i].copyWith(order: i);
+      final dateStops = _dateStops;
+      final item = dateStops.removeAt(oldIndex);
+      dateStops.insert(newIndex, item);
+      for (int i = 0; i < dateStops.length; i++) {
+        final idx = _stops.indexWhere((s) => s.id == dateStops[i].id);
+        if (idx != -1) _stops[idx] = _stops[idx].copyWith(order: i);
       }
     });
   }
 
   Future<void> _editStop(int index) async {
-    final stop = _stops[index];
+    final stop = _dateStops[index];
     final details = await _showStopDetailsDialog(
       title: 'עריכת פרטים',
       subtitle: stop.address,
@@ -121,12 +160,15 @@ class _ManagerScreenState extends State<ManagerScreen> {
     );
     if (details == null) return;
     setState(() {
-      _stops[index] = stop.copyWith(
-        accountNumber: details['accountNumber'],
-        phone1: details['phone1'],
-        phone2: details['phone2'],
-        balance: details['balance'],
-      );
+      final idx = _stops.indexWhere((s) => s.id == stop.id);
+      if (idx != -1) {
+        _stops[idx] = stop.copyWith(
+          accountNumber: details['accountNumber'],
+          phone1: details['phone1'],
+          phone2: details['phone2'],
+          balance: details['balance'],
+        );
+      }
     });
   }
 
@@ -475,11 +517,12 @@ class _ManagerScreenState extends State<ManagerScreen> {
 
   Future<void> _clearRoute() async {
     if (_selectedDriver == null) return;
-    final ok = await _confirm('נקה מסלול?', 'האם למחוק את כל עצירות הנהג?');
+    final label = _formatDateLabel(_workingDate);
+    final ok = await _confirm('נקה יום?', 'האם למחוק את כל עצירות $label?');
     if (!ok) return;
-    await FirestoreService.clearRoute(_selectedDriver!.id);
-    setState(() => _stops = []);
-    _snack('המסלול נמחק');
+    setState(() => _stops.removeWhere((s) => s.date == _workingDate));
+    await FirestoreService.saveRoute(_selectedDriver!.id, _stops);
+    _snack('עצירות $label נמחקו');
   }
 
   void _snack(String msg, {bool isError = false}) {
@@ -512,6 +555,132 @@ class _ManagerScreenState extends State<ManagerScreen> {
         false;
   }
 
+  // ─── Date bar ────────────────────────────────────────────────────────────
+
+  Widget _buildDateBar() {
+    final existingDates = _existingDates.toList()..sort();
+    return Container(
+      color: Colors.white,
+      padding: const EdgeInsets.fromLTRB(8, 0, 8, 10),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          // Navigation row
+          Row(
+            children: [
+              IconButton(
+                icon: const Icon(Icons.chevron_right),
+                tooltip: 'יום קודם',
+                onPressed: () {
+                  final d = DateTime.parse(_workingDate)
+                      .subtract(const Duration(days: 1));
+                  setState(() => _workingDate = _dateStr(d));
+                },
+              ),
+              Expanded(
+                child: GestureDetector(
+                  onTap: () async {
+                    final picked = await showDatePicker(
+                      context: context,
+                      initialDate: DateTime.parse(_workingDate),
+                      firstDate: DateTime.now().subtract(const Duration(days: 365)),
+                      lastDate: DateTime.now().add(const Duration(days: 365)),
+                      locale: const Locale('he'),
+                    );
+                    if (picked != null) {
+                      setState(() => _workingDate = _dateStr(picked));
+                    }
+                  },
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(vertical: 6),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF1565C0).withOpacity(0.08),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        const Icon(Icons.calendar_today,
+                            size: 15, color: Color(0xFF1565C0)),
+                        const SizedBox(width: 6),
+                        Text(
+                          _formatDateLabel(_workingDate),
+                          style: const TextStyle(
+                              fontSize: 15,
+                              fontWeight: FontWeight.bold,
+                              color: Color(0xFF1565C0)),
+                        ),
+                        const SizedBox(width: 4),
+                        Text(
+                          '(${_dateStops.length})',
+                          style: TextStyle(
+                              fontSize: 13, color: Colors.grey[500]),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+              IconButton(
+                icon: const Icon(Icons.chevron_left),
+                tooltip: 'יום הבא',
+                onPressed: () {
+                  final d = DateTime.parse(_workingDate)
+                      .add(const Duration(days: 1));
+                  setState(() => _workingDate = _dateStr(d));
+                },
+              ),
+            ],
+          ),
+          // Date chips
+          if (existingDates.isNotEmpty)
+            SizedBox(
+              height: 32,
+              child: ListView(
+                scrollDirection: Axis.horizontal,
+                children: existingDates.map((date) {
+                  final isSelected = date == _workingDate;
+                  final count = _stops.where((s) => s.date == date).length;
+                  return Padding(
+                    padding: const EdgeInsets.only(left: 6),
+                    child: GestureDetector(
+                      onTap: () => setState(() => _workingDate = date),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 10, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: isSelected
+                              ? const Color(0xFF1565C0)
+                              : Colors.grey[100],
+                          borderRadius: BorderRadius.circular(16),
+                          border: Border.all(
+                            color: isSelected
+                                ? const Color(0xFF1565C0)
+                                : Colors.grey[300]!,
+                          ),
+                        ),
+                        child: Text(
+                          '${_formatDateLabel(date)} ($count)',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color:
+                                isSelected ? Colors.white : Colors.grey[700],
+                            fontWeight: isSelected
+                                ? FontWeight.bold
+                                : FontWeight.normal,
+                          ),
+                        ),
+                      ),
+                    ),
+                  );
+                }).toList(),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
   // ─── UI ──────────────────────────────────────────────────────────────────
 
   @override
@@ -532,10 +701,10 @@ class _ManagerScreenState extends State<ManagerScreen> {
               tooltip: 'דוח גבייה',
               onPressed: _showCollectionsReport,
             ),
-          if (_stops.isNotEmpty)
+          if (_dateStops.isNotEmpty)
               IconButton(
                 icon: const Icon(Icons.delete_sweep),
-                tooltip: 'נקה מסלול',
+                tooltip: 'נקה יום',
                 onPressed: _clearRoute,
               ),
             if (_saving)
@@ -560,6 +729,7 @@ class _ManagerScreenState extends State<ManagerScreen> {
             Column(
               children: [
                 _buildDriverSelector(),
+                _buildDateBar(),
                 _buildSearchBar(),
                 Expanded(child: _buildStopsList()),
               ],
@@ -574,11 +744,11 @@ class _ManagerScreenState extends State<ManagerScreen> {
               ),
           ],
         ),
-        floatingActionButton: _stops.isNotEmpty
+        floatingActionButton: _dateStops.isNotEmpty
             ? FloatingActionButton.extended(
                 onPressed: _saveRoute,
                 icon: const Icon(Icons.save_rounded),
-                label: Text('שמור מסלול · ${_stops.length} עצירות'),
+                label: Text('שמור · ${_dateStops.length} עצירות ${_formatDateLabel(_workingDate)}'),
                 backgroundColor: const Color(0xFF1565C0),
                 foregroundColor: Colors.white,
               )
@@ -724,7 +894,8 @@ class _ManagerScreenState extends State<ManagerScreen> {
   }
 
   Widget _buildStopsList() {
-    if (_stops.isEmpty) {
+    final dateStops = _dateStops;
+    if (dateStops.isEmpty) {
       return Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
@@ -734,7 +905,7 @@ class _ManagerScreenState extends State<ManagerScreen> {
             Text(
               _selectedDriver == null
                   ? 'בחר נהג ותוסיף כתובות'
-                  : 'חפש כתובת להוספה למסלול',
+                  : 'חפש כתובת להוספה ל${_formatDateLabel(_workingDate)}',
               style: TextStyle(fontSize: 16, color: Colors.grey[500]),
             ),
           ],
@@ -748,17 +919,17 @@ class _ManagerScreenState extends State<ManagerScreen> {
         Padding(
           padding: const EdgeInsets.fromLTRB(16, 12, 16, 6),
           child: Text(
-            'עצירות (${_stops.length})',
+            'עצירות ${_formatDateLabel(_workingDate)} (${dateStops.length})',
             style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
           ),
         ),
         Expanded(
           child: ReorderableListView.builder(
             padding: const EdgeInsets.fromLTRB(16, 0, 16, 80),
-            itemCount: _stops.length,
+            itemCount: dateStops.length,
             onReorder: _reorderStop,
             itemBuilder: (ctx, i) {
-              final stop = _stops[i];
+              final stop = dateStops[i];
               final hasDetails = stop.accountNumber.isNotEmpty ||
                   stop.phone1.isNotEmpty ||
                   stop.phone2.isNotEmpty ||

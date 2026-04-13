@@ -23,7 +23,13 @@ class DriverScreen extends StatefulWidget {
 class _DriverScreenState extends State<DriverScreen> {
   final _mapController = MapController();
 
-  List<RouteStop> _stops = [];
+  List<RouteStop> _allStops = [];
+  List<RouteStop> _stops = []; // today's stops only
+
+  static String _todayStr() {
+    final d = DateTime.now();
+    return '${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
+  }
   List<LatLng> _routePoints = [];
   List<NavStep> _navSteps = [];
   int _currentStep = 0;
@@ -60,7 +66,14 @@ class _DriverScreenState extends State<DriverScreen> {
   void _listenRoute() {
     _routeSub =
         FirestoreService.watchRoute(widget.driver.id).listen((stops) async {
-      setState(() => _stops = stops);
+      final today = _todayStr();
+      final todayStops = stops
+          .where((s) => s.date == today || s.date.isEmpty)
+          .toList();
+      setState(() {
+        _allStops = stops;
+        _stops = todayStops;
+      });
       if (stops.length >= 2) {
         setState(() => _loadingRoute = true);
         final result = await MapboxService.getDirections(stops);
@@ -146,10 +159,7 @@ class _DriverScreenState extends State<DriverScreen> {
   }
 
   Future<void> _markStopDone(RouteStop stop) async {
-    final remaining = _stops.where((s) => s.id != stop.id).toList();
-    for (int i = 0; i < remaining.length; i++) {
-      remaining[i] = remaining[i].copyWith(order: i);
-    }
+    final remaining = _allStops.where((s) => s.id != stop.id).toList();
     await FirestoreService.saveRoute(widget.driver.id, remaining);
   }
 
