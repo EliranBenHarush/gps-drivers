@@ -68,7 +68,7 @@ class _DriverScreenState extends State<DriverScreen> {
         FirestoreService.watchRoute(widget.driver.id).listen((stops) async {
       final today = _todayStr();
       final todayStops = stops
-          .where((s) => s.date == today || s.date.isEmpty)
+          .where((s) => s.date.isEmpty || s.date.compareTo(today) <= 0)
           .toList();
       setState(() {
         _allStops = stops;
