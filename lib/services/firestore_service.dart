@@ -71,6 +71,17 @@ class FirestoreService {
     });
   }
 
+  static Future<void> updateCompletedStop({
+    required String docId,
+    required String collectedAmount,
+    required String paymentMethod,
+  }) {
+    return _db.collection('completedStops').doc(docId).update({
+      'collectedAmount': collectedAmount,
+      'paymentMethod': paymentMethod,
+    });
+  }
+
   static Future<void> clearCompletedStops(String driverId) async {
     final snap = await _db
         .collection('completedStops')

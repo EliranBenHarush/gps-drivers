@@ -324,12 +324,16 @@ class _ManagerScreenState extends State<ManagerScreen> {
                         );
                       }
 
-                      double total = 0;
+                      double cashTotal = 0;
+                      double allTotal = 0;
                       for (final item in items) {
                         final v = double.tryParse(
                                 item['collectedAmount'] as String? ?? '') ??
                             0;
-                        total += v;
+                        allTotal += v;
+                        if ((item['paymentMethod'] as String? ?? '') == 'מזומן') {
+                          cashTotal += v;
+                        }
                       }
 
                       return Column(
@@ -344,32 +348,51 @@ class _ManagerScreenState extends State<ManagerScreen> {
                               borderRadius: BorderRadius.circular(14),
                               border: Border.all(color: Colors.green.shade200),
                             ),
-                            child: Row(
+                            child: Column(
                               children: [
-                                const Icon(Icons.account_balance_wallet,
-                                    color: Colors.green, size: 28),
-                                const SizedBox(width: 12),
-                                Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                Row(
                                   children: [
-                                    Text('${items.length} משלוחים',
-                                        style: TextStyle(
-                                            color: Colors.grey[700],
-                                            fontSize: 13)),
-                                    Text('סה"כ גבייה',
-                                        style: TextStyle(
-                                            color: Colors.grey[700],
-                                            fontSize: 13)),
+                                    const Icon(Icons.account_balance_wallet,
+                                        color: Colors.green, size: 28),
+                                    const SizedBox(width: 12),
+                                    Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        Text('${items.length} משלוחים',
+                                            style: TextStyle(
+                                                color: Colors.grey[700],
+                                                fontSize: 13)),
+                                        const Text('סה"כ גבייה',
+                                            style: TextStyle(
+                                                color: Colors.green,
+                                                fontSize: 13,
+                                                fontWeight: FontWeight.w600)),
+                                      ],
+                                    ),
+                                    const Spacer(),
+                                    Text(
+                                      '₪${cashTotal % 1 == 0 ? cashTotal.toInt() : cashTotal.toStringAsFixed(2)}',
+                                      style: const TextStyle(
+                                          fontSize: 26,
+                                          fontWeight: FontWeight.bold,
+                                          color: Colors.green),
+                                    ),
                                   ],
                                 ),
-                                const Spacer(),
-                                Text(
-                                  '₪${total % 1 == 0 ? total.toInt() : total.toStringAsFixed(2)}',
-                                  style: const TextStyle(
-                                      fontSize: 26,
-                                      fontWeight: FontWeight.bold,
-                                      color: Colors.green),
-                                ),
+                                if (allTotal != cashTotal) ...[
+                                  const SizedBox(height: 6),
+                                  Row(
+                                    mainAxisAlignment: MainAxisAlignment.end,
+                                    children: [
+                                      const Icon(Icons.info_outline, size: 13, color: Colors.grey),
+                                      const SizedBox(width: 4),
+                                      Text(
+                                        'כולל כל אמצעי תשלום: ₪${allTotal % 1 == 0 ? allTotal.toInt() : allTotal.toStringAsFixed(2)}',
+                                        style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+                                      ),
+                                    ],
+                                  ),
+                                ],
                               ],
                             ),
                           ),
@@ -499,12 +522,32 @@ class _ManagerScreenState extends State<ManagerScreen> {
                                           ),
                                         ),
                                         const SizedBox(width: 8),
-                                        Text(
-                                          '₪$collected',
-                                          style: const TextStyle(
-                                              fontSize: 18,
-                                              fontWeight: FontWeight.bold,
-                                              color: Colors.green),
+                                        Column(
+                                          crossAxisAlignment: CrossAxisAlignment.end,
+                                          children: [
+                                            Text(
+                                              '₪$collected',
+                                              style: const TextStyle(
+                                                  fontSize: 18,
+                                                  fontWeight: FontWeight.bold,
+                                                  color: Colors.green),
+                                            ),
+                                            if (paymentMethod != 'מזומן' && paymentMethod.isNotEmpty)
+                                              Text('לא נכלל בסה"כ',
+                                                  style: TextStyle(fontSize: 10, color: Colors.grey[500])),
+                                          ],
+                                        ),
+                                        const SizedBox(width: 4),
+                                        IconButton(
+                                          icon: const Icon(Icons.edit_outlined, size: 18, color: Colors.grey),
+                                          padding: EdgeInsets.zero,
+                                          constraints: const BoxConstraints(),
+                                          tooltip: 'ערוך',
+                                          onPressed: () => _editCompletedStop(
+                                            docId: item['docId'] as String? ?? '',
+                                            currentAmount: collected,
+                                            currentMethod: paymentMethod,
+                                          ),
                                         ),
                                       ],
                                     ),
@@ -1031,6 +1074,103 @@ class _ManagerScreenState extends State<ManagerScreen> {
           ),
         ),
       ],
+    );
+  }
+
+  Future<void> _editCompletedStop({
+    required String docId,
+    required String currentAmount,
+    required String currentMethod,
+  }) async {
+    if (docId.isEmpty) return;
+    final ctrl = TextEditingController(text: currentAmount);
+    final paymentMethods = ['מזומן', 'אשראי', 'העברה', 'ביט', "צ'ק"];
+    final result = await showDialog<Map<String, String>>(
+      context: context,
+      builder: (ctx) {
+        String selectedMethod = paymentMethods.contains(currentMethod) ? currentMethod : 'מזומן';
+        return Directionality(
+          textDirection: TextDirection.rtl,
+          child: StatefulBuilder(
+            builder: (ctx, setS) => AlertDialog(
+              title: const Text('עריכת גבייה'),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  TextField(
+                    controller: ctrl,
+                    keyboardType: TextInputType.number,
+                    autofocus: true,
+                    decoration: const InputDecoration(
+                      labelText: 'סכום שנגבה (₪)',
+                      border: OutlineInputBorder(),
+                      prefixText: '₪ ',
+                    ),
+                  ),
+                  const SizedBox(height: 14),
+                  Align(
+                    alignment: Alignment.centerRight,
+                    child: Text('אמצעי תשלום',
+                        style: TextStyle(fontSize: 13, color: Colors.grey[600])),
+                  ),
+                  const SizedBox(height: 8),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: paymentMethods.map((method) {
+                      final selected = method == selectedMethod;
+                      return GestureDetector(
+                        onTap: () => setS(() => selectedMethod = method),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                          decoration: BoxDecoration(
+                            color: selected ? const Color(0xFF2E7D32) : Colors.grey[100],
+                            borderRadius: BorderRadius.circular(20),
+                            border: Border.all(
+                              color: selected ? const Color(0xFF2E7D32) : Colors.grey[300]!,
+                            ),
+                          ),
+                          child: Text(
+                            method,
+                            style: TextStyle(
+                              fontSize: 13,
+                              fontWeight: selected ? FontWeight.bold : FontWeight.normal,
+                              color: selected ? Colors.white : Colors.grey[700],
+                            ),
+                          ),
+                        ),
+                      );
+                    }).toList(),
+                  ),
+                ],
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(ctx, null),
+                  child: const Text('ביטול'),
+                ),
+                ElevatedButton(
+                  onPressed: () => Navigator.pop(ctx, {
+                    'amount': ctrl.text.trim(),
+                    'method': selectedMethod,
+                  }),
+                  style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF2E7D32),
+                      foregroundColor: Colors.white),
+                  child: const Text('שמור'),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+    ctrl.dispose();
+    if (result == null) return;
+    await FirestoreService.updateCompletedStop(
+      docId: docId,
+      collectedAmount: result['amount'] ?? '',
+      paymentMethod: result['method'] ?? 'מזומן',
     );
   }
 
