@@ -473,6 +473,9 @@ class _DriverScreenState extends State<DriverScreen> {
               const SizedBox(width: 10),
               _mapBtn(Icons.fit_screen, _fitAllStops,
                   tooltip: 'הצג מסלול מלא'),
+              const SizedBox(width: 6),
+              _mapBtn(Icons.receipt_long, _showCollectionsReport,
+                  tooltip: 'דוח גבייה'),
               if (_navStarted) ...[
                 const SizedBox(width: 6),
                 _mapBtn(Icons.stop_circle, _stopNavigation,
@@ -999,6 +1002,266 @@ class _DriverScreenState extends State<DriverScreen> {
         ),
       ),
     );
+  }
+
+  void _showCollectionsReport() {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => Directionality(
+        textDirection: TextDirection.rtl,
+        child: DraggableScrollableSheet(
+          initialChildSize: 0.7,
+          maxChildSize: 0.95,
+          minChildSize: 0.4,
+          builder: (ctx, scroll) => Container(
+            decoration: const BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.vertical(top: Radius.circular(22)),
+            ),
+            child: Column(
+              children: [
+                Container(
+                  width: 40,
+                  height: 4,
+                  margin: const EdgeInsets.symmetric(vertical: 12),
+                  decoration: BoxDecoration(
+                      color: Colors.grey[300],
+                      borderRadius: BorderRadius.circular(2)),
+                ),
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 0, 20, 12),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.receipt_long, color: Color(0xFF1565C0)),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Text(
+                          'דוח גבייה - ${widget.driver.name}',
+                          style: const TextStyle(
+                              fontSize: 18, fontWeight: FontWeight.bold),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const Divider(height: 1),
+                Expanded(
+                  child: StreamBuilder<List<Map<String, dynamic>>>(
+                    stream: FirestoreService.watchCompletedStops(widget.driver.id),
+                    builder: (ctx, snap) {
+                      if (snap.connectionState == ConnectionState.waiting) {
+                        return const Center(child: CircularProgressIndicator());
+                      }
+                      final items = snap.data ?? [];
+                      if (items.isEmpty) {
+                        return const Center(
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Icon(Icons.inbox, size: 60, color: Colors.grey),
+                              SizedBox(height: 12),
+                              Text('אין גבייות עדיין',
+                                  style: TextStyle(color: Colors.grey)),
+                            ],
+                          ),
+                        );
+                      }
+
+                      double cashTotal = 0;
+                      double allTotal = 0;
+                      for (final item in items) {
+                        final v = double.tryParse(
+                                item['collectedAmount'] as String? ?? '') ?? 0;
+                        allTotal += v;
+                        if ((item['paymentMethod'] as String? ?? '') == 'מזומן') {
+                          cashTotal += v;
+                        }
+                      }
+
+                      return Column(
+                        children: [
+                          Container(
+                            margin: const EdgeInsets.all(16),
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 20, vertical: 14),
+                            decoration: BoxDecoration(
+                              color: Colors.green.shade50,
+                              borderRadius: BorderRadius.circular(14),
+                              border: Border.all(color: Colors.green.shade200),
+                            ),
+                            child: Column(
+                              children: [
+                                Row(
+                                  children: [
+                                    const Icon(Icons.account_balance_wallet,
+                                        color: Colors.green, size: 28),
+                                    const SizedBox(width: 12),
+                                    Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        Text('${items.length} משלוחים',
+                                            style: TextStyle(
+                                                color: Colors.grey[700],
+                                                fontSize: 13)),
+                                        const Text('סה"כ גבייה',
+                                            style: TextStyle(
+                                                color: Colors.green,
+                                                fontSize: 13,
+                                                fontWeight: FontWeight.w600)),
+                                      ],
+                                    ),
+                                    const Spacer(),
+                                    Text(
+                                      '₪${cashTotal % 1 == 0 ? cashTotal.toInt() : cashTotal.toStringAsFixed(2)}',
+                                      style: const TextStyle(
+                                          fontSize: 26,
+                                          fontWeight: FontWeight.bold,
+                                          color: Colors.green),
+                                    ),
+                                  ],
+                                ),
+                                if (allTotal != cashTotal) ...[
+                                  const SizedBox(height: 6),
+                                  Row(
+                                    mainAxisAlignment: MainAxisAlignment.end,
+                                    children: [
+                                      const Icon(Icons.info_outline,
+                                          size: 13, color: Colors.grey),
+                                      const SizedBox(width: 4),
+                                      Text(
+                                        'כולל כל אמצעי תשלום: ₪${allTotal % 1 == 0 ? allTotal.toInt() : allTotal.toStringAsFixed(2)}',
+                                        style: TextStyle(
+                                            fontSize: 12,
+                                            color: Colors.grey[600]),
+                                      ),
+                                    ],
+                                  ),
+                                ],
+                              ],
+                            ),
+                          ),
+                          Expanded(
+                            child: ListView.builder(
+                              controller: scroll,
+                              padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                              itemCount: items.length,
+                              itemBuilder: (ctx, i) {
+                                final item = items[i];
+                                final collected =
+                                    item['collectedAmount'] as String? ?? '';
+                                final expected =
+                                    item['expectedBalance'] as String? ?? '';
+                                final address =
+                                    item['address'] as String? ?? '';
+                                final paymentMethod =
+                                    item['paymentMethod'] as String? ?? '';
+                                final accountNumber =
+                                    item['accountNumber'] as String? ?? '';
+                                final methodColor = _paymentColor(paymentMethod);
+                                return Card(
+                                  margin: const EdgeInsets.only(bottom: 8),
+                                  shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(12)),
+                                  child: Padding(
+                                    padding: const EdgeInsets.all(12),
+                                    child: Row(
+                                      children: [
+                                        CircleAvatar(
+                                          radius: 18,
+                                          backgroundColor: const Color(0xFF1565C0),
+                                          child: Text('${i + 1}',
+                                              style: const TextStyle(
+                                                  color: Colors.white,
+                                                  fontWeight: FontWeight.bold,
+                                                  fontSize: 13)),
+                                        ),
+                                        const SizedBox(width: 12),
+                                        Expanded(
+                                          child: Column(
+                                            crossAxisAlignment:
+                                                CrossAxisAlignment.start,
+                                            children: [
+                                              Text(address,
+                                                  style: const TextStyle(
+                                                      fontSize: 13),
+                                                  maxLines: 2,
+                                                  overflow:
+                                                      TextOverflow.ellipsis),
+                                              if (accountNumber.isNotEmpty)
+                                                Text('#$accountNumber',
+                                                    style: const TextStyle(
+                                                        fontSize: 12,
+                                                        color: Colors.indigo,
+                                                        fontWeight:
+                                                            FontWeight.bold)),
+                                              if (expected.isNotEmpty)
+                                                Text('יתרה: ₪$expected',
+                                                    style: TextStyle(
+                                                        fontSize: 11,
+                                                        color:
+                                                            Colors.grey[600])),
+                                              if (paymentMethod.isNotEmpty)
+                                                Container(
+                                                  margin: const EdgeInsets.only(top: 4),
+                                                  padding: const EdgeInsets.symmetric(
+                                                      horizontal: 8, vertical: 2),
+                                                  decoration: BoxDecoration(
+                                                    color: methodColor.withOpacity(0.12),
+                                                    borderRadius:
+                                                        BorderRadius.circular(10),
+                                                    border: Border.all(
+                                                        color: methodColor
+                                                            .withOpacity(0.4)),
+                                                  ),
+                                                  child: Text(paymentMethod,
+                                                      style: TextStyle(
+                                                          fontSize: 11,
+                                                          color: methodColor,
+                                                          fontWeight:
+                                                              FontWeight.bold)),
+                                                ),
+                                            ],
+                                          ),
+                                        ),
+                                        const SizedBox(width: 8),
+                                        Text(
+                                          '₪$collected',
+                                          style: const TextStyle(
+                                              fontSize: 18,
+                                              fontWeight: FontWeight.bold,
+                                              color: Colors.green),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                );
+                              },
+                            ),
+                          ),
+                        ],
+                      );
+                    },
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Color _paymentColor(String method) {
+    switch (method) {
+      case 'מזומן': return Colors.green;
+      case 'אשראי': return Colors.blue;
+      case 'העברה': return Colors.purple;
+      case 'ביט': return const Color(0xFFE91E8C);
+      case "צ'ק": return Colors.orange;
+      default: return Colors.grey;
+    }
   }
 
   IconData _maneuverIcon(String type) {
