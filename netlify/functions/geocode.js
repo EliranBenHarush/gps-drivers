@@ -63,7 +63,7 @@ exports.handler = async function (event) {
     // Step 2: Place Details in parallel to get coordinates
     const details = await Promise.all(
       placeIds.map((id) =>
-        httpsGet('places.googleapis.com', `/v1/places/${id}`, {
+        httpsGet('places.googleapis.com', `/v1/places/${id}?languageCode=he`, {
           'X-Goog-Api-Key': GOOGLE_KEY,
           'X-Goog-FieldMask': 'formattedAddress,displayName,location',
         })
