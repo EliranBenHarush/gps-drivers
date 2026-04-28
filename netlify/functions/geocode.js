@@ -36,6 +36,10 @@ exports.handler = async function (event) {
       res.on('end', () => {
         try {
           const json = JSON.parse(data);
+          if (json.error) {
+            resolve({ statusCode: 502, body: JSON.stringify({ google_error: json.error }) });
+            return;
+          }
           const places = json.places || [];
           const results = places.map((p) => ({
             display_name: p.formattedAddress || p.displayName?.text || '',
@@ -48,7 +52,7 @@ exports.handler = async function (event) {
             body: JSON.stringify(results),
           });
         } catch (e) {
-          resolve({ statusCode: 500, body: JSON.stringify({ error: 'parse error' }) });
+          resolve({ statusCode: 500, body: JSON.stringify({ error: 'parse error', raw: data }) });
         }
       });
     });
