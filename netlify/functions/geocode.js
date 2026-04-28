@@ -40,8 +40,11 @@ exports.handler = async function (event) {
             resolve({ statusCode: 502, body: JSON.stringify({ google_error: json.error }) });
             return;
           }
-          const places = json.places || [];
-          const results = places.map((p) => ({
+          if (!json.places) {
+            resolve({ statusCode: 200, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ debug_raw: json }) });
+            return;
+          }
+          const results = json.places.map((p) => ({
             display_name: p.formattedAddress || p.displayName?.text || '',
             lon: String(p.location.longitude),
             lat: String(p.location.latitude),
