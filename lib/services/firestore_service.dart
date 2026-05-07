@@ -82,6 +82,10 @@ class FirestoreService {
     });
   }
 
+  static Future<void> deleteCompletedStop(String docId) {
+    return _db.collection('completedStops').doc(docId).delete();
+  }
+
   static Future<void> clearCompletedStops(String driverId) async {
     final snap = await _db
         .collection('completedStops')

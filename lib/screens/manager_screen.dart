@@ -549,6 +549,37 @@ class _ManagerScreenState extends State<ManagerScreen> {
                                             currentMethod: paymentMethod,
                                           ),
                                         ),
+                                        IconButton(
+                                          icon: const Icon(Icons.delete_outline, size: 18, color: Colors.red),
+                                          padding: EdgeInsets.zero,
+                                          constraints: const BoxConstraints(),
+                                          tooltip: 'מחק',
+                                          onPressed: () async {
+                                            final docId = item['docId'] as String? ?? '';
+                                            if (docId.isEmpty) return;
+                                            final ok = await showDialog<bool>(
+                                              context: ctx,
+                                              builder: (c) => Directionality(
+                                                textDirection: TextDirection.rtl,
+                                                child: AlertDialog(
+                                                  title: const Text('מחק גבייה'),
+                                                  content: const Text('האם למחוק גבייה זו?'),
+                                                  actions: [
+                                                    TextButton(onPressed: () => Navigator.pop(c, false), child: const Text('ביטול')),
+                                                    ElevatedButton(
+                                                      onPressed: () => Navigator.pop(c, true),
+                                                      style: ElevatedButton.styleFrom(backgroundColor: Colors.red, foregroundColor: Colors.white),
+                                                      child: const Text('מחק'),
+                                                    ),
+                                                  ],
+                                                ),
+                                              ),
+                                            );
+                                            if (ok == true) {
+                                              await FirestoreService.deleteCompletedStop(docId);
+                                            }
+                                          },
+                                        ),
                                       ],
                                     ),
                                   ),
