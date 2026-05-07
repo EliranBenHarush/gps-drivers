@@ -25,4 +25,9 @@ flutter build web \
   --dart-define=MAPBOX_TOKEN=${MAPBOX_TOKEN} \
   --release
 
+# Patch index.html with Apple PWA meta tags so iPhone allows "Add to Home Screen"
+INDEX="build/web/index.html"
+APPLE_TAGS='  <meta name="apple-mobile-web-app-capable" content="yes">\n  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">\n  <meta name="apple-mobile-web-app-title" content="GPS ניהול">\n  <link rel="apple-touch-icon" href="icons/Icon-192.png">\n  <link rel="apple-touch-icon" sizes="512x512" href="icons/Icon-512.png">'
+sed -i "s|</head>|$APPLE_TAGS\n</head>|" "$INDEX"
+
 echo "✅ Build complete"
